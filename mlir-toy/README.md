@@ -21,4 +21,25 @@ To build the documentation from the TableGen description of the dialect operatio
 ```sh
 cmake --build . --target mlir-doc
 ```
+The `toyc` compiler is located in `./bin/toyc` and documentation is located in `docs/Toy.md`.
 
+## Runing
+
+
+```sh
+# get help
+./bin/toyc --help
+# run ../tests/simple.toy
+./bin/toyc -emit=jit ../tests/simple.toy
+```
+
+You can get other types of output by passing the `-emit` parameter:
+```sh
+--emit=<value>                                            - Select the kind of output desired
+  =ast                                                    -   output the AST dump
+  =mlir                                                   -   output the MLIR dump
+  =mlir-affine                                            -   output the MLIR dump after affine lowering
+  =mlir-llvm                                              -   output the MLIR dump after llvm lowering
+  =llvm                                                   -   output the LLVM IR dump
+  =jit                                                    -   JIT the code and run it by invoking the main function
+```

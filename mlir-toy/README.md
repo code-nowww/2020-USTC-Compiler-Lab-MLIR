@@ -4,7 +4,7 @@ This contains sample code to support the tutorial on using MLIR for building a c
 
 This example comes from the [Toy Tutorial](https://mlir.llvm.org/docs/Tutorials/Toy/) of MLIR, refer to the link for more information. The main code comes from [mlir/examples/toy/Ch7](https://github.com/llvm/llvm-project/tree/llvmorg-11.0.0/mlir/examples/toy/Ch7) of LLVM-11.0.0. The CMakeLists.txt is modified referring to the example of [mlir/examples/standalone](https://github.com/llvm/llvm-project/tree/llvmorg-11.0.0/mlir/examples/standalone) so that it can be compiled out-of-tree.
 
-You can see the [mlir-toy2020.md](./mlir-toy2020.md) for more information and next steps. 
+You can see the [mlir-toy2020.md](./docs/mlir-toy2020.md) for more information and next steps. 
 
 ## Building
 

@@ -2,11 +2,11 @@
 
 [MLIR](https://mlir.llvm.org/)（Multi-Level Intermediate Representation）是一种构建可复用、可扩展的编译器基础设施的新方法。MLIR旨在解决软件碎片化，改进对异构硬件的编译，降低构建领域特定编译器的代价，并协助将现有编译器连接在一起。
 
-有关MLIR的演讲及论文参见 https://mlir.llvm.org/talks/，推荐看其中的 CGO 2020 的 keynote。
+有关MLIR的演讲及论文参见 [Talks and Related Publications](https://mlir.llvm.org/talks/)，推荐看其中的 CGO 2020 的 keynote。
 
-[MLIR Toy](https://mlir.llvm.org/docs/Tutorials/Toy/)是在MLIR上实现一个玩具语言的教程。它旨在介绍MLIR的概念；特别地，介绍如何用方言 [dialects](https://mlir.llvm.org/docs/LangRef/#dialects) （非正式的说，方言可以理解为不同抽象层次的中间表示，也可以理解为[Domain-specific language](https://en.wikipedia.org/wiki/Domain-specific_language)）来帮助简化语言构造、程序变换，并向下翻译到LLVM或其他代码生成基础设施。
+[MLIR Toy](https://mlir.llvm.org/docs/Tutorials/Toy/)是在MLIR上实现一个玩具语言的教程。它旨在介绍MLIR的概念；特别地，介绍如何用方言 [dialects](https://mlir.llvm.org/docs/LangRef/#dialects) （非正式的说，方言可以理解为不同抽象层次的中间表示）来帮助简化语言构造、程序变换，并向下翻译到LLVM或其他代码生成基础设施。
 
-本项目的[mlir-toy](./mlir-toy)子文件夹包含[MLIR Toy](https://mlir.llvm.org/docs/Tutorials/Toy/)的实现代码，你需要结合[教程](https://mlir.llvm.org/docs/Tutorials/Toy/)来理解代码实现，领悟其中的概念和设计理念，并尝试进行扩展。
+本项目的[mlir-toy](../)子文件夹包含[MLIR Toy](https://mlir.llvm.org/docs/Tutorials/Toy/)的实现代码，你需要结合[教程](https://mlir.llvm.org/docs/Tutorials/Toy/)来理解代码实现，领悟其中的概念和设计理念，并尝试进行扩展。
 
 简要的说，在代码实现过程中，首先使用递归下降的 parser 解析源代码生成 AST 语法树，在 MLIR 中定义 Toy Dialect 方言和相关算子，然后将 AST 翻译成 Toy Dialect，接着将 Toy Dialect 翻译为 Affine Dialect（需要进行类型和算子的转换），特别地，其中的 print 运算转换成了 LLVM Dialect ，这一部分的实现得益于MLIR能够允许不同的 Dialect 共存。然后再将 Affine Dialect 转换为了 LLVM Dialect，这时整个 module 都是基于 LLVM Dialect，然后可以将整个 LLVM Dialect 转换为 LLVM IR，由LLVM后端进行代码生成。在这一个过程中，需要用户完成的部分是 Toy 语言到 Toy Dialect 的前端解析和翻译，Toy Dialect 的定义和 Toy Dialect 和现有 Dialect 的转换（最终目标是转换为 LLVM Dialect），其他 MLIR 现有 Dialect 到 LLVM IR 转换到代码生成的部分以及对应 Dialect 上的编译优化都已经有对应的实现。
 

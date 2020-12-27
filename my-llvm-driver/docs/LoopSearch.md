@@ -1,18 +1,33 @@
+## 目录
+
 [TOC]
 
-## 统计循环信息
+## 收集统计LLVM IR级别的循环信息
 
-### 0. 简介
-
-本实训项目旨在引导学员学习和理解LLVM Pass开发的基本概念，学会运用LLVM的接口进行Pass模块开发。本项目主要开发一个循环访问的分析Pass，该Pass需要实现：统计循环信息，包括平行循环数量以及每个循环的深度信息
+本实训项目旨在引导学员学习和理解Clang/LLVM的Pass管理、控制流图、支配树及循环的基本概念和实现，学会运用Clang/LLVM的应用编程接口开发一个收集统计函数中循环信息的分析Pass，该Pass需要实现：统计循环信息，包括顶层并列的循环数量以及每个循环的深度信息。
 
 ### 1. 基础知识
 
-#### 控制流图
+#### Def-Use和Use-Def链的维护
 
-##### LLVM创建`Teminitor`语句，以`BranchInst`为例
+LLVM IR中[Value](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Value.h#L74)类是表示程序中各种值的基类，也是指令[Instruction](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Instruction.h#L45)、函数[Function](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Function.h#L61)的超类。每个[Value](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Value.h#L74)对象有一个[Use](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Use.h#L44) *`UseList`，用来跟踪使用该值的那些其他的值。每个[Use](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Use.h#L44) 表示值定义[Value](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Value.h#L74)到其[User](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/User.h#L44)的边。[User](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/User.h#L44)定义使用一个值时必须实现的接口，它从[Value](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Value.h#L74)类继承。通过基础的 [Value](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Value.h#L74)、[Use](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Use.h#L44) 、[User](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/User.h#L44) 维护了值及其用户之间的关系（参见官网的[The User and owned Use classes' memory layout](http://www.llvm.org/docs/ProgrammersManual.html#the-user-and-owned-use-classes-memory-layout)）。
 
-LLVM IR层在创建时维护了控制流图(CFG)，下面从LLVM构建conditional branch指令为例，解释LLVM维护CFG的动作。如下面这一段代码是在创建一个函数，参考自[llvm/unittests](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/unittests/Analysis/MemorySSATest.cpp#L85):
+[Instruction](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Instruction.h#L45) 从 [User](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/User.h#L44) 继承。由[Use](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Use.h#L44) 、[User](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/User.h#L44)关系，也建立了[Instruction](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Instruction.h#L45) 上的def-use与use-def链。你可以通过官网的[Iterating over def-use & use-def chains](http://llvm.org/docs/ProgrammersManual.html#id102)来迭代访问def-use与use-def链。
+
+LLVM的核心类及其之间的关系如下图所示。
+
+![image-20201223215920748](image/image-20201223215920748.png)
+
+- 图中的**实线箭头**表示子类继承基类，**虚线箭头**表示容器与成员关系；
+- **红色箭头**强调的是`BranchInst`的继承关系。作为`User`，`BranchInst`可以设置其操作数，操作数的数目由[llvm/IR/User.h](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/include/llvm/IR/User.h#L56)的`new`接收的非类型模板参数的值确定。
+
+#### 控制流图创建示例
+
+在LLVM IR层，创建或更新LLVM IR时同时维护其控制流图(CFG)。这里以在[LLVM11.0.0](https://github.com/llvm/llvm-project/tree/llvmorg-11.0.0)中构建conditional branch指令为例，解释LLVM维护CFG的动作。
+
+##### 1）创建函数和基本块
+
+如下这段代码是在创建一个函数，参考自[llvm/unittests](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/unittests/Analysis/MemorySSATest.cpp#L75):
 
 ```c++
 IRBuilder<> B;
@@ -23,11 +38,15 @@ BasicBlock *Entry(BasicBlock::Create(C, "", F));
 BasicBlock *Left(BasicBlock::Create(C, "", F)); // Left BasicBlock表示true分支
 BasicBlock *Right(BasicBlock::Create(C, "", F));// Right BasicBlock表示false分支
 B.SetInsertPoint(Entry);						// 设置当前插入的基本块为Entry基本块
-B.CreateCondBr(B.getTrue(), Left, Right);		// CreateCondBr表示构建条件跳转指令
+B.CreateCondBr(B.getTrue(), Left, Right);		// CreateCondBr表示构建条件分支指令
 ...
 ```
 
-其中，`Line 9`处调用了`IRBuilder`类的`CreateCondBr`的工厂方法构建了一个`BranchInst类`(`B.getTrue()`是返回一个恒真值)，这个方法的[定义](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/include/llvm/IR/IRBuilder.h#L988)如下：
+其中，`Line 9`处调用了`IRBuilder`类的`CreateCondBr`的工厂方法，构建了一个`BranchInst类`的实例(`B.getTrue()`是返回一个恒真值)。
+
+##### **2）IRBuilder中创建条件分支指令的工厂方法CreateCondBr**
+
+这个方法的[定义](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/IRBuilder.h#L967)如下：
 
 ```c++
 BranchInst *CreateCondBr(Value *Cond, BasicBlock *True, BasicBlock *False,
@@ -42,7 +61,13 @@ BranchInst *CreateCondBr(Value *Cond, BasicBlock *True, BasicBlock *False,
 }
 ```
 
-可以看到`Line 5`调用了`BranchInst`类的`Create`方法构建了一个`BranchInst`类的实例，在`Line 9`处把这个实例化得到的对象插入到Entry块中。`Line3 Create`方法调用了`BranchInst`的[构造函数](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/include/llvm/IR/Instructions.h#L3075)，如下：
+可以看到`Line 3`调用了`BranchInst`类的`Create`方法构建了一个`BranchInst`类的实例，在`Line 9`处把该实例对象插入到Entry块中。
+
+##### **3）分支指令的创建**
+
+**`BranchInst`类中的静态创建方法BranchInst::Create**
+
+`BranchInst`类的[`Create`方法](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Instructions.h#L3029)调用`BranchInst`的构造函数如下：
 
 ```c++
 static BranchInst *Create(BasicBlock *IfTrue, BasicBlock *IfFalse,
@@ -51,16 +76,11 @@ static BranchInst *Create(BasicBlock *IfTrue, BasicBlock *IfFalse,
 }
 ```
 
-注意这里的模板运算符`new`接收了一个非类型模板参数`3`，这个模板运算符是在`User`下被重载的，感兴趣的同学可以参考[llvm/IR/User.h](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/include/llvm/IR/User.h#L56)。这里，需要同学们对于LLVM的核心类有一个基本的认识，参考下图：
+注意：这里的模板运算符`new`接收了一个非类型模板参数`3`，这个模板运算符是在`User`下被重载的，感兴趣的同学可以参考[llvm/IR/User.h](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/User.h#L56)、[void *User::operator new(size_t Size)](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/lib/IR/User.cpp#L153)。
 
-![image-20201223215920748](image/image-20201223215920748.png)
+**`BranchInst`类的构造函数--同时建立def-use和use-def**
 
-- 图中的**实线箭头**表示子类继承基类，**虚线箭头**表示容器与成员关系；
-- **红色箭头**强调的是`BranchInst`的继承关系，作为`User`，`BranchInst`可以设置其操作数，操作数的数目由[llvm/IR/User.h](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/include/llvm/IR/User.h#L56)的`new`接收的非类型模板参数的值确定。
-
-##### [CFG的建立，以BranchInst为例](https://github.com/llvm/llvm-project/blob/main/llvm/lib/IR/Instructions.cpp#L1209)
-
-上一步骤最终调用了`BranchInst`的构造方法，如下：
+上一小步最终调用的是如下`BranchInst`的[构造函数](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/lib/IR/Instructions.cpp#L1193)：
 
 ```c++
 BranchInst::BranchInst(BasicBlock *IfTrue, BasicBlock *IfFalse, Value *Cond,
@@ -74,9 +94,17 @@ BranchInst::BranchInst(BasicBlock *IfTrue, BasicBlock *IfFalse, Value *Cond,
 }
 ```
 
-IfTrue和IfFalse是If语句的俩个分支，Op<-1>()和Op<-2>()的`=`(赋值)运算符被重载了，上述代码的第6、7行把IfTrue和IfFalse分支加入到了BranchInst* this的Use中，把BranchInst* this加入到了IfTrue和IfFalse分支的User中。通过访问Def-Use链可以访问CFG信息。
+`IfTrue` 和 `IfFalse` 是If语句的两个分支，`Op<-1>()`和 `Op<-2>()` 的 `=` (赋值)运算符被重载了。`Op<Idx>()`的定义见[llvm/IR/User.h](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/User.h#L133)，返回[Use](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Use.h#L44)引用；[Use](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Use.h#L44)中重载了 `=` 运算符。
 
-##### [后继基本块的访问](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/include/llvm/IR/CFG.h#L136)
+上述代码的第6、7行把`IfTrue`和 `IfFalse` 分支加入到了 `BranchInst* this` 的Use中，把`BranchInst* this` 加入到了`IfTrue` 和 `IfFalse` 分支的User中。通过访问Def-Use链可以访问CFG信息。
+
+#### 控制流图中基本块的遍历
+
+官网提供了[Iterating over the `BasicBlock` in a `Function`](http://llvm.org/docs/ProgrammersManual.html#id97)、[Iterating over the `Instruction` in a `BasicBlock`](http://llvm.org/docs/ProgrammersManual.html#id98)、[Iterating over the `Instruction` in a `Function`](http://llvm.org/docs/ProgrammersManual.html#id99)。
+
+##### 1）[后继基本块的访问](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/CFG.h#L136)
+
+基本块的后继迭代器模板类SuccIterator定义在[llvm/IR/CFG.h](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/CFG.h#L136):
 
 ```c++
 template <class InstructionT, class BlockT>
@@ -212,14 +240,14 @@ inline const_succ_iterator succ_end(const BasicBlock *BB) {
 }
 ```
 
-根据上面的代码，可以通过<a name="succ_begin">`succ_begin`</a>方法获得前驱基本块的`begin`迭代器，这里的方法实例化了`succ_iterator`的对象。`succ_iterator`重载了`std::iterator`的运算符，需要注意的主要是：
+根据上面的代码，可以通过<a name="succ_begin">`succ_begin`</a>方法获得基本块BB的`begin`迭代器，这里的方法实例化了`succ_iterator`的对象。`succ_iterator`重载了`std::iterator`的运算符，需要注意的是：
 
 - 取后继基本块的时候，实例化`succ_iterator`时传入参数是`BB->getTerminator()`，即BB的后继基本块信息保存在BB的终结语句上;
 - 构造函数`succ_iterator(InstructionT *Inst) `把成员`Inst`置为`Inst`，把`Idx`置为0，表示从终结语句的第0个后继开始，依次取其后继；
 - 构造函数`succ_iterator(InstructionT *Inst, bool) `把成员`Idx`置为`Inst`的后继的总数，表示取一个`Inst`的`Use_end()`；
 - `*`取值运算符重载为调用`Inst->getSuccessor(Idx)`得到`Inst`的第`Idx`个后继。
 
-如果要访问后继基本块，可以参考下面的示例代码，也可以参考`llvm/lib/Analysis/CFG.cpp`中的[回边查找算法](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/lib/Analysis/CFG.cpp#L34)：
+如果要访问后继基本块，可以参考下面的示例代码，也可以参考`llvm/lib/Analysis/CFG.cpp`中的[回边查找算法`llvm::FindFunctionBackedges`](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/lib/Analysis/CFG.cpp#L25)：
 
 ```c++
 void visitSucc(BasicBlock* BB){
@@ -230,7 +258,9 @@ void visitSucc(BasicBlock* BB){
 }
 ```
 
-##### [前驱基本块的访问](https://github.com/llvm/llvm-project/blob/62ec4ac90738a5f2d209ed28c822223e58aaaeb7/llvm/include/llvm/IR/CFG.h#L43)
+##### 2）[前驱基本块的访问](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/CFG.h#L43)
+
+基本块的前驱迭代器模板类PredIterator定义在[llvm/IR/CFG.h](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/CFG.h#L42):
 
 ```c++
 template <class Ptr, class USE_iterator> // Predecessor Iterator
@@ -307,9 +337,9 @@ inline const_pred_iterator pred_begin(const BasicBlock *BB) {
 inline pred_iterator pred_end(BasicBlock *BB) { return pred_iterator(BB, true);}
 ```
 
-根据上面的代码，可以通过`pred_begin`方法获得前驱基本块的`begin`迭代器，这里的方法实例化了`PredIterator`的对象。`PredIterator`重载了`std::iterator`的运算符，需要注意的主要是：
+根据上面的代码，可以通过`pred_begin`方法获得前驱基本块的`begin`迭代器，这里的方法实例化了`PredIterator`的对象。`PredIterator`重载了`std::iterator`的运算符，需要注意的是：
 
-- 构造函数`PredIterator(Ptr *bb) `把成员`It`置为`bb`的`user_begin()`，`user_begin()`是第一个使用`bb`的[User](https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/IR/User.h#L44)，下同；
+- 构造函数`PredIterator(Ptr *bb) `把成员`It`置为`bb`的`user_begin()`，`user_begin()`是第一个使用`bb`的[User](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/User.h#L44) ，下同；
 - 构造函数`PredIterator(Ptr *bb, bool) `把成员`It`置为`bb`的`user_end()`；
 - `++`的前自增运算符调用`advancePastNonTerminators`方法跳过那些不是终结语句的`User`；
 - `*`取值运算符重载为调用`cast<Instruction>(*It)->getParent()`得到`User`所在的基本块，即一个前驱基本块。
@@ -320,84 +350,82 @@ inline pred_iterator pred_end(BasicBlock *BB) { return pred_iterator(BB, true);}
 
 ​	支配树算法描述详见 [支配树算法说明.pdf](./支配树算法说明.pdf)
 
-##### 直接必经节点算法
+##### 1）支配树建立函数伪代码说明 
 
-1. 支配树建立函数伪代码说明 
-   
-     ​		支配树建立函数为`SemiNCA`函数，函数代码详见[https://github.com/xuweihf/llvm-project/blob/master/llvm/include/llvm/Support/GenericDomTreeConstruction.h](https://github.com/xuweihf/llvm-project/blob/master/llvm/include/llvm/Support/GenericDomTreeConstruction.h) Line  271~376。函数的伪代码说明如下。
-   
-   ~~~python
-   runSemiNCA (&DT, MinLevel)
-   	for(i : NextDFSNum){
-           # 先将各个节点的IDOM设置为各节点的父亲
-           Node[i].IDom = Node[i].Parent
-       }
-       
-       # Step 1 计算各个节点的半支配节点
-       for(i : NextDFSNum){
-           Node[i].Semi = Node[i].Parent;
-           
-           for(N : Node[i]的前驱) {
-           	if(Node[N].level < MinLevel)
-           		continue
-   
-           	SemiU = Node[eval(N, i+1)].semi	# 计算节点N的semi
-               
-               # 查找节点i的半支配路径中最小的Semi值
-               if (SemiU < Node[i].Semi)
-               	Node[i].Semi = SemiU
-           }
-       }
-       
-       # Step 2 采用NCA方法，计算各个节点的直接支配节点
-       for(i : NextDFSNum){
-   		SDomNum = Node[i].Semi
-           WIDomCandidate = Node[i].IDom	#初始为当前节点的父亲
-           while (Node[WIDomCandidate].DFSNum > SDomNum)
-           	WIDomCandidate = Node[WIDomCandidate].IDom
-           
-           Node[i].IDom = WIDomCandidate	
-       }    
-   ~~~
-   
-2. 查找半支配路径上最小Semi函数伪代码说明
-   
-   ​	查找半支配路径上最小Semi函数为`eval`函数，函数代码详见[https://github.com/xuweihf/llvm-project/blob/master/llvm/include/llvm/Support/GenericDomTreeConstruction.h](https://github.com/xuweihf/llvm-project/blob/master/llvm/include/llvm/Support/GenericDomTreeConstruction.h) Line 240~268。函数的伪代码说明如下。
-   
-   ~~~python
-   runSemiNCA (V, LastLinked)
-   	# 若节点V的序号小于当前查找节点序号，直接返回
-       Info = Node[V]
-   	if(Info->Parent < LastLinked)
-       	return Node[V]->Label
-       
-       # Step 1 将以节点V结尾的半支配路径放入Stack中
-       do {
-         Stack.push_back(VInfo);
-         VInfo = Node[VInfo->Parent];
-       } while (VInfo->Parent >= LastLinked);
-       
-       # Step 2 进行路径压缩，同时查找本半支配路径上的最小semi值
-       PInfo = VInfo
-       PLabelInfo = Node[PInfo->Label];
-       do {
-         VInfo = Stack.pop_back()
-         VInfo->Parent = PInfo->Parent	#路径压缩
-         const InfoRec *VLabelInfo = Node[VInfo->Label]
-         # 查找本半支配路径上的最小semi值
-         if (PLabelInfo->Semi < VLabelInfo->Semi) 
-           VInfo->Label = PInfo->Label
-         else
-           PLabelInfo = VLabelInfo
-         PInfo = VInfo;
-       } while (!Stack.empty())
-       
-       return VInfo->Label	
-   ~~~
+​		支配树建立函数为`runSemiNCA`函数，函数代码详见[llvm/Support/GenericDomTreeConstruction.h](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/Support/GenericDomTreeConstruction.h#L304)。函数的伪代码说明如下。
 
-##### LLVM支配树的构造和访问
+~~~python
+runSemiNCA (&DT, MinLevel)
+	for(i : [1,NextDFSNum-1] ) {
+        # 先将各个节点的IDOM设置为各节点的父亲
+        Node[i].IDom = Node[i].Parent
+    }
+    
+    # Step 1 计算各个节点的半支配节点
+    for(i : [NextDFSNum-1, 2] ){
+        Node[i].Semi = Node[i].Parent;
+        
+        for(N : Node[i]的前驱) {
+        	if(Node[N].level < MinLevel)
+        		continue
 
-这里可以参考我们实现的代码中的[LSPass]()，这个Pass实现的是基于LLVM IR的CFG信息和支配树信息查找代码中存在的所有回边(BackEdge)，这代表了代码中存在的所有循环。算法如下：
+        	SemiU = Node[eval(N, i+1)].semi	# 计算节点N的semi
+            
+            # 查找节点i的半支配路径中最小的Semi值
+            if (SemiU < Node[i].Semi)
+            	Node[i].Semi = SemiU
+        }
+    }
+    
+    # Step 2 采用NCA方法，计算各个节点的直接支配节点
+    for(i : [2,NextDFSNum-1] ){
+		SDomNum = Node[i].Semi
+        WIDomCandidate = Node[i].IDom	#初始为当前节点的父亲
+        while (Node[WIDomCandidate].DFSNum > SDomNum)
+        	WIDomCandidate = Node[WIDomCandidate].IDom
+        
+        Node[i].IDom = WIDomCandidate	
+    }    
+~~~
+
+##### 2）查找半支配路径上最小Semi函数伪代码说明
+
+​	查找半支配路径上最小Semi函数为`eval`函数，函数代码详见[llvm/Support/GenericDomTreeConstruction.h](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/Support/GenericDomTreeConstruction.h#L273)。函数的伪代码说明如下。
+
+~~~python
+eval (V, LastLinked)
+	# 若节点V的序号小于当前查找节点序号，直接返回
+    Info = Node[V]
+	if(Info->Parent < LastLinked)
+    	return Node[V]->Label
+    
+    # Step 1 将以节点V结尾的半支配路径放入Stack中
+    do {
+      Stack.push_back(VInfo);
+      VInfo = Node[VInfo->Parent];
+    } while (VInfo->Parent >= LastLinked);
+    
+    # Step 2 进行路径压缩，同时查找本半支配路径上的最小semi值
+    PInfo = VInfo
+    PLabelInfo = Node[PInfo->Label];
+    do {
+      VInfo = Stack.pop_back()
+      VInfo->Parent = PInfo->Parent	#路径压缩
+      const InfoRec *VLabelInfo = Node[VInfo->Label]
+      # 查找本半支配路径上的最小semi值
+      if (PLabelInfo->Semi < VLabelInfo->Semi) 
+        VInfo->Label = PInfo->Label
+      else
+        PLabelInfo = VLabelInfo
+      PInfo = VInfo;
+    } while (!Stack.empty())
+    
+    return VInfo->Label	
+~~~
+
+### 2. LLVM支配树的构造和访问
+
+这里可以参考我们实现的代码中的[LSPass](https://gitee.com/s4plus/llvm-ustc-proj/blob/master/my-llvm-driver/include/optimization/LoopSearchPass.hpp#L55)，这个Pass实现的是基于LLVM IR的CFG信息和支配树信息查找给定[Function](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Function.h#L61)代码中存在的所有回边(BackEdge)，每条回边代表代码中存在的一个自然循环。算法如下：
 
 ```c++
 bool runOnFunction(Function &F) override {
@@ -435,16 +463,16 @@ bool runOnFunction(Function &F) override {
 
 ##### 思考题（选做一题）
 
-1. runSemiNCA函数Step 2计算NCA时，如何证明找到的 WIDomCandidate一定是Node[i].Semi和Node[i].Parent的最近共同祖先？
-2. 阅读论文[A fast algorithm for finding dominators in a flowgraph](.\A fast algorithm for finding dominators in a flowgraph.pdf)，类似推导SemiNCA算法的算法复杂度
-3. FindFunctionBackedges函数中InStack变量的物理意义可否给出解释（例如Visited变量的物理意义为存储已遍历的BB块集合、VisitStack变量的物理意义为栈中待处理的边集合）
+1. 在[runSemiNCA](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/Support/GenericDomTreeConstruction.h#L304)函数Step 2计算NCA时，如何证明找到的 WIDomCandidate一定是Node[i].Semi和Node[i].Parent的最近共同祖先？
+2. 阅读论文[A fast algorithm for finding dominators in a flowgraph](.\A fast algorithm for finding dominators in a flowgraph.pdf)，推导SemiNCA算法的算法复杂度
+3. 请解释[FindFunctionBackedges](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/lib/Analysis/CFG.cpp#L25)函数中InStack变量的物理意义（例如Visited变量的物理意义为存储已访问的BB块集合、VisitStack变量的物理意义为栈中待处理的边集合）
 
-### 2. 作业要求
+### 3. 循环统计分析要求
 
-基于driver，实现一个分析Pass，该Pass需要做到：
+基于[Driver](https://gitee.com/s4plus/llvm-ustc-proj/blob/master/my-llvm-driver/include/Driver/driver.h#L23)，实现一个分析器，该分析器依次输出每个函数的循环信息，其中会调用对每个[Function](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Function.h#L61)的分析Pass，该Pass需要做到：
 
-- 统计循环信息
-  - 平行循环数量
+- 统计给定[Function](https://github.com/llvm/llvm-project/blob/llvmorg-11.0.0/llvm/include/llvm/IR/Function.h#L61)中的循环信息
+  - 并列循环的数量
   - 每个循环的深度信息
 
 如对于给出的以下样例：
@@ -473,7 +501,7 @@ int main(){
 }
 ```
 
-你需要识别出main函数下有俩个平行循环，依次记为`L1`，`L2`; 其中，`L1`下又有俩个平行循环，依次记为`L11`，`L12`；`L11`下有一个嵌套深度为1的循环，记为`L111`;`L12`下有一个嵌套深度为1的循环，记为`L121`；`L2`下有一个嵌套深度为1的循环，记为`L21`。
+你需要识别出main函数下有两个并列循环，依次记为`L1`、`L2`; 其中，`L1`下又有两个并列循环，依次记为`L11`，`L12`；`L11`下有一个嵌套深度为1的循环，记为`L111`;`L12`下有一个嵌套深度为1的循环，记为`L121`；`L2`下有一个嵌套深度为1的循环，记为`L21`。
 
 因此你需要识别出如下的循环信息：
 

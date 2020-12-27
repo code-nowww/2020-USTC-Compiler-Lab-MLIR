@@ -1,69 +1,70 @@
-# LLVM Driver Tutorial
+# LLVM驱动程序教程
 
-This directory contains sample code to support the tutorial on using Clang/LLVM API for building a compiler or analyzer or optimizer for C/C++ or other extended languages.  We define an extensible class `Driver`, which invokes Clang/LLVM API to parse the input program file, to generate AST  and LLVM IR , and then to perform program analysis or transformation on these IRs.
+本目录提供教你用Clang/LLVM应用编程接口构建编译器、程序分析器或优化器的示例代码。我们定义了可扩展的`Driver`类，它调用Clang/LLVM API实现对输入的源程序文件的解析，产生AST、LLVM IR等中间表示，并在这些中间表示上开展程序分析和变换。
 
-## Directory Structure
+## 目录说明
 
 ```
 /
  ├─ CMakeLists.txt          
- ├─ main.cpp                    Program Entry, which calls Driver
+ ├─ main.cpp                    入口程序,调用Driver
  ├─ include
  |   ├─ Checker
- |   |   ├─ myAnalysisAction.h  AST Static Analysis Action
- |   |   └─ SimpleDivZeroChecker.h   Checker Example
- |   ├─ Driver                  Definition of the encapsulated Driver class
+ |   |   ├─ myAnalysisAction.h  AST静态分析Action
+ |   |   └─ SimpleDivZeroChecker.h   checker示例
+ |   ├─ Driver                  封装的Driver类的定义
  |   └─ optimization
- |       ├─ LoopSearchPass.hpp  Pass for searching Back Edges
- |       └─ MyPasses.hpp        Pass Examples，including Function Pass and Module Pass
- ├─ src                         Definition of functions
+ |       ├─ LoopSearchPass.hpp  查找回边的分析Pass
+ |       └─ MyPasses.hpp        示例Passes，包含函数Pass和模块Pass各一个
+ ├─ src                         函数定义
  |   ├─ Checker
  |   └─ Driver
- ├─ tests                       Test Cases
- └─ docs                        Documents
+ ├─ tests                       测试样例
+ └─ docs                        实验说明文档
      ├─ LoopSearch.md
      ├─ DataFlow.md
      └─ ClangStaticAnalyzer.md
 ```
-## Supported Features
-1. Generate the DAG of Clang AST
-2. Generate LLVM IR by calling [Clang Driver](https://github.com/llvm/llvm-project/blob/release/11.x/clang/lib/Driver/Driver.cpp), and then  generate the DAG by calling `CFGPrinter`、`DominatorTreePrinter` and further vusualize
-3. Optimize IR by calling some LLVM IR TransForm Passes
-4. Define class `mDriver::Driver` by encapusulating operations, which support argument parsing, customized `Pass` and printing `LLVM IR` automatically
-5. Define class `myAnalysisAction` which invokes  `SimpleDivChecker`  and supports adding new checkers
-6. [Driver](src/Driver/driver.cpp) invokes  customized `FunctionPass` and`ModulePass` defined in `optimization/MyPasses.hpp`
-7. [Driver](src/Driver/driver.cpp) invokes  `LSPass` defined in `optimization/LoopSearchPass.hpp`, which has already implemented the back edge search algorithm
+## 已支持的功能
+1. 产生了Clang AST的DAG图；
+2. 调用[Clang Driver](https://github.com/llvm/llvm-project/blob/release/11.x/clang/lib/Driver/Driver.cpp)产生LLVM IR，在此基础上调用`CFGPrinter`、`DominatorTreePrinter`产生DAG图，并进行了可视化；
+3. 调用LLVM IR层次的一些TransForm Passes，对IR进行优化；
+4. 封装形成了驱动程序框架类`mDriver::Driver`，支持参数解析、定制`Pass`并自动打印`LLVM IR`；
+5. 类`myAnalysisAction`调用除0检查，并支持添加新的Checker；
+6. Driver类调用了`optimization/MyPasses.hpp`中自定义的`FunctionPass`和`ModulePass`；
+7. Driver类调用了`optimization/LoopSearchPass.hpp`中自定义的`LSPass`，实现对给定程序的回边查找算法。
 
-## Building and Using mDriver::Driver
+## 使用说明
 
-### 1. Building Clang and LLVM
-We have prepared the server with the LLVM Debug version installed for everyone (in-school access is required). The address and account password will be notified separately. If you plan to configure the same experimental environment on your machine, you can refer to [llvm 11.0.0 Installation Documentation](./docs/LLVM-11.0.0-install.md).
+### 1. 编译Clang和LLVM
+我们已经为大家准备了安装有LLVM Debug版本的服务器(需要校内访问)，地址和账号密码另行通知；如果你打算在本机配置相同的实验环境的话，可以参考[llvm 11.0.0安装文档](./docs/LLVM-11.0.0-install.md)。
 
-### 2. Building and using mDriver::Driver
-In the root directory of this software package, execute the following command to compile the driver:
-```
+### 2. 使用Driver
+在本软件包根目录下，执行下面的命令编译驱动程序：
+```bash
 mkdir build && cd build
 cmake ..
 make [-j<num>]
 ```
-The generated executable file is `build/mClang`. The usage method and parameter meaning of mClang are as follows:
+生成的可执行文件为`build/mClang`，mClang的使用方法及参数含义如下：
+```bash
+mClang <源文件> [-show-ir-after-pass] [-o=<输出IR文件路径>]
 ```
-mClang <source file> [-show-ir-after-pass] [-o=<output path>]
--show-ir-after-pass          print LLVM IR after each Pass invoke
--o=<output path>            specify the output path of LLVM IRs and the default is stdio
--h --help --h               display help menu
+参数说明：
+```bash
+-show-ir-after-pass          在每个Pass被调用后打印LLVM IR
+-o=<输出IR文件路径>            指定LLVM IRs输出文件路径,若无则输出到标准输出
+-h 或 --help 或 --h           显示帮助菜单
 ```
+## 欢迎贡献
 
-## Welcome Contributions
+这里提供的驱动程序Driver还存在许多不足的地方，比如：
+- 可能存在内存泄漏问题，有些指针没有使用智能指针管理；
+- 针对未经验证的输入代码可能会有段错误等异常；
+- 后端未实现汇编代码和可执行文件的生成，也未实现JIT执行。
 
-The driver provided here still has many shortcomings, such as:
+欢迎大家发现并向我们提出问题，也欢迎你解决问题后向我们提pull request。
 
-- There may be memory leak problems, and some pointers do not use smart pointer management
-- For unverified input codes, there may be exceptions such as segmentation errors
-- The backend does not implement assembly code and executable file generation, nor does it implement JIT execution.
+## 研制者
 
-Everyone is welcome to find out and ask us questions, and we welcome you to make a pull request to us after solving the problem.
-
-## Contributors
-
-This tutorial software was developed by the [s4plus team](https://s4plus.ustc.edu.cn/) of [Yu Zhang](http://staff.ustc.edu.cn/~yuzhang/) from the University of Science and Technology of China. The developers include Shuo Liu, Yitong Huang, Shunhong Wang, and Mingyu Chen, etc. Teacher Wei Xu is involved in algorithm understanding and environment construction.
+本教程软件由中国科学技术大学[张昱](http://staff.ustc.edu.cn/~yuzhang/)老师[团队](https://s4plus.ustc.edu.cn/)研制，研制者包括刘硕、黄奕桐、王顺洪、陈铭瑜等。徐伟老师参与算法理解和环境搭建等工作。

@@ -1,4 +1,6 @@
-# Clang Static Analyzer 实验
+# Clang Static Analyzer 实践
+
+在本实训项目中，你将学习使用Clang静态分析器，理解现有的Checker并进行思考，尝试编写自己的Checker。
 
 ## 1. 使用Clang Static Analyzer
 
@@ -22,12 +24,12 @@ void test()
 接下来可以执行命令：
 
 ```
-$ scan-build clang -cc1 test.c    
+$ scan-build clang -cc1 test.c
 ```
 
 其中`clang -cc1`指令表示只调用clang的前端进行编译。 你可以看到它会检测出bug，并报了warning。
 
-> 如果具有可视化界面，可以为`scan-build`添加`-V`选项，你还可以看到经过良好排版的网页端结果。
+> 如果具有可视化界面，可以为`scan-build`添加`-v`选项，你还可以看到经过良好排版的网页端结果。
 
 你也可以在直接调用clang命令时指定要使用的某个checker，从而在clang执行期间会调用这个checker对代码进行检查。考虑下面这个程序`testfile.c`。
 
@@ -87,7 +89,7 @@ Clang 中实现了很多独立的 checker 用来做静态检查。先前看到�
 3. 使用`clang -cc1 -ast-view test.c`绘制程序的AST，输出保存为`sa/AST.svg`
 4. 根据文档说明，绘制`sa/CFG.svg`, `sa/ExplodedGraph.svg`
 5. 简要说明`test.c`、`AST.svg`、`CFG.svg`和`ExplodedGraph.svg`之间的联系与区别
-6. 特别说明：如果你采用了release配置，或者你无法正常产生svg，你可以选择使用dump选项，并将文字输出放在对应名字的txt中。其他格式的图片也可以接受，不需要为格式问题耗费时间。
+6. 特别说明：如果你采用了release配置，或者你无法正常产生svg，你可以选择使用dump选项，并将文字输出放在对应名字的txt中。其他格式的图片也可以接受， 你不需要为格式问题耗费时间。
 
 ### 2.2 阅读[Checker Developer Manual](http://clang-analyzer.llvm.org/checker_dev_manual.html)的Static Analyzer Overview一节
 
@@ -105,7 +107,7 @@ int *p = &x;
 int z = *(p + 1);
 ```
 
-### 2.3 简要阅读[LLVM Programmer's Manual](http://llvm.org/releases/3.9.0/docs/ProgrammersManual.html)和[LLVM Coding Standards](http://llvm.org/releases/3.9.0/docs/CodingStandards.html)
+### 2.3 简要阅读[LLVM Programmer's Manual](http://llvm.org/releases/11.0.0/docs/ProgrammersManual.html)和[LLVM Coding Standards](http://llvm.org/releases/11.0.0/docs/CodingStandards.html)
 
 这两个manual比较长，你不需要全部阅读，你只需要给出下面几个问题的答案：
 
@@ -156,27 +158,18 @@ void foo(double f) {
 }
 ```
 
-- 不能处理多次循环
-
-  ：当前分析器简单地将每个循环展开
-
-   
-
-  ```
-  N
-  ```
-
-  (比较小的整数) 次
+- **不能处理多次循环**：当前分析器简单地将每个循环展开`N`(比较小的整数) 次
 
   ```c++
-  void foo() {
+void foo() {
    int *pi = new int;
-   for (int i = 0; i < 3; i++) // if replace 3 with 100, no bug report
+ for (int i = 0; i < 3; i++) // if replace 3 with 100, no bug report
        if (i == 1000)
            delete pi;          // bug report: potential leakage
   }
   ```
-
+```
+  
 - **不能处理按位运算**
 
   ```c
@@ -193,7 +186,7 @@ void foo(double f) {
   
     return 0;
   }
-  ```
+```
 
 - 除了这些缺陷以外, clang静态分析器还有哪些缺陷?
 
@@ -232,18 +225,19 @@ void foo(double f) {
 4. 编写测试样例进行测试。你的测试样例要能体现出你的checker能完成以及不能完成的事情。注意检查会不会有false positive的情况。测试样例放在`sa/test/`目录下。
 5. 编写说明文档。文档中说明你完成的功能，遇到的困难等。
 
-编写好后，你需要提交你的PBXXXXXXXXChecker.cpp，以及对你的checker功能的说明（在`README(.md)`中简述）、测试样例。请保证你的程序可以编译通过，之后在实验评测时会将各位的checker统一注册编译。
+编写好后，你需要提交你的XXXChecker.cpp，以及对你的checker功能的说明（在`README(.md)`中简述）、测试样例。请保证你的程序可以编译通过，之后在实验评测时会将各位的checker统一注册编译。
 
 ### 3.3 需要提交的目录格式：
 
 ```
 sa/
+ ├─ README.md               目录文件说明
  ├─ compile.txt             编译记录
  ├─ AST.svg, CFG.svg, ExplodedGraph.svg
  ├─ test.c                  2.1中要求的程序和图
  ├─ answers.txt(或.md)      回答问题
  │                          以上为基础要求部分
- ├─ PBXXXXXXXXChecker.cpp   编写的checker源码
+ ├─ XXXChecker.cpp          编写的checker源码
  ├─ checker.(md|doc|tex|txt)    对checker的说明
  ├─ analysis.(md|doc|tex|txt)   对 clang 静态分析器的分析
  └─ test/

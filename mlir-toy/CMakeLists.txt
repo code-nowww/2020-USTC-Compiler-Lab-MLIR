@@ -1,3 +1,4 @@
+# For a better template to copy, see examples/standalone
 cmake_minimum_required(VERSION 3.10)
 
 if(POLICY CMP0068)
@@ -12,6 +13,8 @@ endif()
 if(POLICY CMP0077)
   cmake_policy(SET CMP0077 NEW)
 endif()
+
+set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard to conform to")
 
 project(mlir-toy LANGUAGES CXX C)
 
@@ -37,11 +40,14 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_BINARY_DIR}/include)
 add_definitions(${LLVM_DEFINITIONS})
 
+include_directories(include)
 add_subdirectory(include)
 
 set(LLVM_LINK_COMPONENTS
   Core
   Support
+  nativecodegen
+  OrcJIT
   )
 
 set(LLVM_TARGET_DEFINITIONS mlir/ToyCombine.td)
@@ -66,7 +72,6 @@ add_llvm_executable(toyc
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/include/)
-
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 target_link_libraries(toyc
@@ -79,7 +84,7 @@ target_link_libraries(toyc
     MLIRIR
     MLIRParser
     MLIRPass
-    MLIRSideEffects
+    MLIRSideEffectInterfaces
     MLIRTargetLLVMIR
     MLIRTransforms
     )

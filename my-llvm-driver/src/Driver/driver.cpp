@@ -81,9 +81,13 @@ bool Driver::ParseArgs(SVec &Args) {
 }
 
 bool Driver::BuildCI(DiagnosticsEngine &Diags) {
+    // 调用Clang Driver根据参数创建编译任务实例
+    // Ref:https://github.com/llvm/llvm-project/blob/main/clang/lib/Driver/Driver.cpp#L982
     _C.reset(_TheDriver.BuildCompilation(_Args));
     assert(_C && "Compilation build failed!");
     auto &Jobs = _C->getJobs();
+    // 前面创建的编译任务的数目只能为1，i.e. 输入的源代码文件数为1
+    // Command: An executable path/name and argument vector to execute.
     if (Jobs.size() != 1 || !isa<driver::Command>(*Jobs.begin())) {
         SmallString<256> Msg;
         llvm::raw_svector_ostream OS(Msg);
@@ -96,13 +100,12 @@ bool Driver::BuildCI(DiagnosticsEngine &Diags) {
         Diags.Report(diag::err_fe_expected_clang_command);
         return false;
     }
+    // 创建一个编译器实例来接收编译任务并设置该实例的诊断器
     std::shared_ptr<CompilerInvocation> CI(new CompilerInvocation);
     CompilerInvocation::CreateFromArgs(*CI, Cmd.getArguments(), Diags);
     _Clang.setInvocation(CI);
     _Clang.createDiagnostics();
-    // _Clang.setDiagnostics(&Diags);
     if (!_Clang.hasDiagnostics()) return false;
-    // assert(!_Clang.getHeaderSearchOpts().UseBuiltinIncludes &&  !_Clang.getHeaderSearchOpts().ResourceDir.empty())
     return true;
 }
 

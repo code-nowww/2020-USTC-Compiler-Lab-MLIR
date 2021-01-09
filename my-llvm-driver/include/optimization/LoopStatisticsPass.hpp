@@ -61,6 +61,20 @@ void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
                            LoopStat *LI,
                            const DomTreeBase<BB> &DomTree);
 
+class Loop {
+private:
+  Loop* ParentLoop;
+  BB* header;
+
+public:
+  Loop(BB* header): header(header) {}
+  BB* getHeader() { return header; }
+  Loop* getParentLoop() const { return ParentLoop; }
+  void setParentLoop(Loop* L) { ParentLoop = L; }
+
+};
+
+
 class LoopStat {
 private:
   std::map<const BasicBlock *, Loop *> BBMap;
@@ -87,8 +101,7 @@ public:
       }
       // Perform a backward CFG traversal to discover and map blocks in this loop.
       if (!Backedges.empty()) {
-        Loop* L = new Loop;
-        L->setHeader(Header);
+        Loop* L = new Loop(Header);
         Loops.push_back(L);
         discoverAndMapSubloop(L, ArrayRef<BasicBlock *>(Backedges), this, DomTree);
       }
@@ -100,22 +113,6 @@ public:
   }
   Loop* getLoopFor(BB* block) { return BBMap[block]; }
   void changeLoopFor(BB* block, Loop* L) { BBMap[block] = L; }
-};
-
-class Loop {
-private:
-  Loop* ParentLoop;
-  BB* header;
-
-public:
-  Loop() {}
-  Loop(BB* header): header(header) {}
-
-  void setHeader(BB* header) { this->header = header; }
-  BB* getHeader() { return header; }
-  Loop* getParentLoop() const { return ParentLoop; }
-  void setParentLoop(Loop* L) { ParentLoop = L; }
-
 };
 
 void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,

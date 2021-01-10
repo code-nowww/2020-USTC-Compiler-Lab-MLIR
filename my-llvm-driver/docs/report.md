@@ -17,21 +17,21 @@
 ###### 引理1 
 > Node[i].Semi.DFSNum < i.DFSNum
 
-证明：由定义可知（等会补
+证明：`Node[i].Semi`是`Node[i]`的一个半必经路径的首点，由半必经路径定义，`Node[i].Semi.DFSNum < i.DFSNum`
 ###### 引理2 
 > Node[i].iDom.DFSNum < Node[i].DFSNum
  
-证明：等会补
+证明：由支配节点定义，从流图入口到达`Node[i]`的每条路径都会经过`Node[i].iDom`，因此在DFS先序遍历时，第一次到达`Node[i]`并编号前一定已经到达过`Node[i].iDom`并编号，因此`Node[i].iDom.DFSNum < Node[i].DFSNum`  
+类似地，我们也可以用如下方式表述：
+支配树上的任意一条边$x\rightarrow y$，有`x.DFSNum<y.DFSNum`
 ###### 引理3 
 > Node[i].Parent.DFSNum $\geq$ Node[i].Semi.DFSNum
  
-证明：等会补
-###### 引理4 
-> 支配树上的任意一条边$x\rightarrow y$，有`x.DFSNum<y.DFSNum`  
-> 
-证明：等会补
+证明：由于在CFG图上，`i.Parent->i`也是一条半必经路径，其起点为`i.Parnet`，因此`i.semi`作为半必经路径DFSNum最小的首点，一定有`Node[i].Parent.DFSNum $\geq$ Node[i].Semi.DFSNum`。
 
 ##### 证明  
+> TODO:好像有关于semi和sdom符号指代问题可能需要修改  
+
 记`Node[i].Semi = u,Node[i].Parent=v`, 约定`u>v`表示`u.DFSNum`>`v.DFSNum`, 记$f(x)=x.iDom,f^{(n)}=f*f^{(n-1)}$证明如下:
 
 ###### 1. 若`WIDomCandidate==u`  

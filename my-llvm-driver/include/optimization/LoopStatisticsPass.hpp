@@ -75,19 +75,26 @@ private:
 
 public:
   Loop(BB* Header, std::string Label): Header(Header), Label(Label), ParentLoop(nullptr) {}
+
+  // header
   BB* getHeader() { return Header; }
+
+  // parent loop
   LoopPtr getParentLoop() const { return ParentLoop; }
   void setParentLoop(LoopPtr L) { ParentLoop = L; }
+
+  // subloop
   std::vector<LoopPtr> getSubLoops() { return SubLoops; }
-  void addSubLoop(LoopPtr loop) { SubLoops.push_back(loop); }
+  void addSubLoop(LoopPtr L) { SubLoops.push_back(L); }
+
+  // label
   std::string getLabel() { return Label; }
   void setLabel(std::string Label) { this->Label = Label; }
+  
+  // restructure
   void reverseSubLoops() { std::reverse(SubLoops.begin(), SubLoops.end()); }
-
   void* relabelAndReorderLoop(std::string Label) {
     setLabel(Label);
-    // reverseSubLoops();
-
     size_t SubLoopSize = SubLoops.size();
     for (size_t i = 0; i < SubLoopSize; i++) {
       SubLoops[i]->relabelAndReorderLoop(Label + std::to_string(i + 1));
@@ -138,18 +145,18 @@ public:
     // make the nested loops tree.
     std::set<LoopPtr> DoneSet;
     std::reverse(Loops.begin(), Loops.end());
-    for (LoopPtr loop: Loops) {
-      if (!loop->getParentLoop()) {
-        TopLevelLoops.push_back(loop);
+    for (LoopPtr L: Loops) {
+      if (!L->getParentLoop()) {
+        TopLevelLoops.push_back(L);
         continue;
       }
       LoopPtr parent = nullptr;
-      while (parent = loop->getParentLoop()) {
+      while (parent = L->getParentLoop()) {
         // TODO: use find might be more efficient
-        if (DoneSet.count(loop) > 0) break;
-        parent->addSubLoop(loop);
-        DoneSet.insert(loop);
-        loop = parent;
+        if (DoneSet.count(L) > 0) break;
+        parent->addSubLoop(L);
+        DoneSet.insert(L);
+        L = parent;
       }
     }
     // reverse the loops and label them according to TA's requirements
@@ -161,29 +168,29 @@ public:
   }
 
   LoopPtr getLoopFor(BB* block) { 
-    auto loop = BBMap.find(block);
-    if (loop == BBMap.end()) return nullptr;
-    else return loop->second;
+    auto L = BBMap.find(block);
+    if (L == BBMap.end()) return nullptr;
+    else return L->second;
   }
 
   void changeLoopFor(BB* block, LoopPtr L) { BBMap[block] = L; }
 
-  void printBase(raw_ostream &OS, LoopPtr loop, size_t Indent) const {
+  void printBase(raw_ostream &OS, LoopPtr L, size_t Indent) const {
     std::string IndentStr = "";
     for(size_t i = 0; i < Indent; i++) {
       IndentStr += "\t";
     }
-    OS << IndentStr << "\"" << loop->getLabel() << "\": {\n";
+    OS << IndentStr << "\"" << L->getLabel() << "\": {\n";
       OS << IndentStr << "\t\"depth\": " << Indent - 1 << "\n";
-      for (auto SubLoop: loop->getSubLoops()) {
+      for (auto SubLoop: L->getSubLoops()) {
         printBase(OS, SubLoop, Indent + 1);
       }
     OS << IndentStr << "}\n";
   }
 
   void print(raw_ostream &OS, size_t Indent) const {
-    for (auto loop: TopLevelLoops) {
-      printBase(OS, loop, Indent);
+    for (auto L: TopLevelLoops) {
+      printBase(OS, L, Indent);
     }
   }
 
@@ -192,12 +199,7 @@ public:
 void discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
                            LoopStat* LS,
                            const DomTreeBase<BB> &DomTree) {
-  typedef GraphTraits<Inverse<BB *>> InvBlockTraits;
-
-  unsigned NumBlocks = 0;
-  unsigned NumSubloops = 0;
-
-  // Perform a backward CFG traversal using a worklist.
+  // A backward CFG traversal, where ReverseCFGWorklist is just like a stack
   std::vector<BB *> ReverseCFGWorklist(Backedges.begin(), Backedges.end());
   while (!ReverseCFGWorklist.empty()) {
     BB *PredBB = ReverseCFGWorklist.back();
@@ -207,33 +209,26 @@ void discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
     if (!Subloop) {
       if (!DomTree.isReachableFromEntry(PredBB))
         continue;
-
-        // This is an undiscovered block. Map it to the current loop.
-        LS->changeLoopFor(PredBB, L);
-        ++NumBlocks;
-        if (PredBB == L->getHeader())
-          continue;
-        // Push all block predecessors on the worklist.
-        ReverseCFGWorklist.insert(ReverseCFGWorklist.end(),
-                      InvBlockTraits::child_begin(PredBB),
-                      InvBlockTraits::child_end(PredBB));
+      // This is an undiscovered block. Map it to the current loop.
+      LS->changeLoopFor(PredBB, L);
+      if (PredBB == L->getHeader())
+        continue;
+      // Push all block predecessors on the worklist.
+      ReverseCFGWorklist.insert(ReverseCFGWorklist.end(),
+                                GraphTraits<Inverse<BB *>>::child_begin(PredBB),
+                                GraphTraits<Inverse<BB *>>::child_end(PredBB));
     } else {
       // This is a discovered block. Find its outermost discovered loop.
       while (LoopPtr Parent = Subloop->getParentLoop())
         Subloop = Parent;
-
       // If it is already discovered to be a subloop of this loop, continue.
       if (Subloop == L)
         continue;
-
       // Discover a subloop of this loop.
       Subloop->setParentLoop(L);
-      ++NumSubloops;
       PredBB = Subloop->getHeader();
-      // Continue traversal along predecessors that are not loop-back edges from
-      // within this subloop tree itself. Note that a predecessor may directly
-      // reach another subloop that is not yet discovered to be a subloop of
-      // this loop, which we must traverse.
+      // Continue traverse the reversed CFG, but we should view each subloop as
+      // a single node, which can be filtered by the if-statement below.
       for (const auto Pred : children<Inverse<BB *>>(PredBB)) {
         if (LS->getLoopFor(Pred) != Subloop)
         ReverseCFGWorklist.push_back(Pred);

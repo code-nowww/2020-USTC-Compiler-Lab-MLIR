@@ -40,6 +40,7 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <string>
 
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/PostOrderIterator.h"
@@ -63,25 +64,49 @@ void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
 
 class Loop {
 private:
+  std::string Label;
   Loop* ParentLoop;
-  BB* header;
+  BB* Header;
+  std::vector<Loop*> SubLoops;
 
 public:
-  Loop(BB* header): header(header) {}
-  BB* getHeader() { return header; }
+  Loop(BB* Header, std::string Label): Header(Header), Label(Label), ParentLoop(nullptr) {}
+  BB* getHeader() { return Header; }
   Loop* getParentLoop() const { return ParentLoop; }
   void setParentLoop(Loop* L) { ParentLoop = L; }
+  std::vector<Loop*> getSubLoops() { return SubLoops; }
+  void addSubLoop(Loop* loop) { SubLoops.push_back(loop); }
+  std::string getLabel() { return Label; }
+  void setLabel(std::string Label) { this->Label = Label; }
+  void reverseSubLoops() { std::reverse(SubLoops.begin(), SubLoops.end()); }
+
+  void* relabelAndReorderLoop(std::string Label) {
+    setLabel(Label);
+    // reverseSubLoops();
+
+    size_t SubLoopSize = SubLoops.size();
+    for (size_t i = 0; i < SubLoopSize; i++) {
+      SubLoops[i]->relabelAndReorderLoop(Label + std::to_string(i + 1));
+    }
+  }
 
 };
 
 
 class LoopStat {
 private:
+  size_t LoopCounter = 0;
   std::map<const BasicBlock *, Loop *> BBMap;
   std::vector<Loop*> Loops;
+  std::vector<Loop*> TopLevelLoops;
 
 public:
   LoopStat() {}
+
+  Loop* allocateLoop(BB* Header) {
+    std::string Label = "Loop" + std::to_string(LoopCounter++);
+    return new Loop(Header, Label);
+  }
 
   void analyze(const DominatorTree &DomTree) {
     // Postorder traversal of the dominator tree.
@@ -101,22 +126,65 @@ public:
       }
       // Perform a backward CFG traversal to discover and map blocks in this loop.
       if (!Backedges.empty()) {
-        Loop* L = new Loop(Header);
+        Loop* L = allocateLoop(Header);
         Loops.push_back(L);
         discoverAndMapSubloop(L, ArrayRef<BasicBlock *>(Backedges), this, DomTree);
       }
     }
-    // Perform a single forward CFG traversal to populate block and subloop
-    // vectors for all loops.
-    // PopulateLoopsDFS<BasicBlock, Loop> DFS(this);
-    // DFS.traverse(DomRoot->getBlock());
+    // make the nested loops tree.
+    std::set<Loop*> DoneSet;
+    std::reverse(Loops.begin(), Loops.end());
+    for (Loop* loop: Loops) {
+      if (!loop->getParentLoop()) {
+        TopLevelLoops.push_back(loop);
+        continue;
+      }
+      Loop* parent = nullptr;
+      while (parent = loop->getParentLoop()) {
+        // TODO: use find might be more efficient
+        if (DoneSet.count(loop) > 0) break;
+        parent->addSubLoop(loop);
+        DoneSet.insert(loop);
+        loop = parent;
+      }
+    }
+    // reverse the loops and label them according to TA's requirements
+    size_t TopLevelLoopsSize = TopLevelLoops.size();
+    for (size_t i = 0; i < TopLevelLoopsSize; i++) {
+      TopLevelLoops[i]->relabelAndReorderLoop("L" + std::to_string(i + 1));
+    }
+    
   }
-  Loop* getLoopFor(BB* block) { return BBMap[block]; }
+
+  Loop* getLoopFor(BB* block) { 
+    auto loop = BBMap.find(block);
+    if (loop == BBMap.end()) return nullptr;
+    else return loop->second;
+  }
+
   void changeLoopFor(BB* block, Loop* L) { BBMap[block] = L; }
+
+  void printBase(raw_ostream &OS, Loop* loop, size_t indent) const {
+    std::string IndentStr = "";
+    for(size_t i = 0; i < indent; i++) {
+      IndentStr += "\t";
+    }
+    OS << IndentStr << loop->getLabel() << "\n";
+    for (auto SubLoop: loop->getSubLoops()) {
+      printBase(OS, SubLoop, indent + 1);
+    }
+  }
+
+  void print(raw_ostream &OS) const {
+    for (auto loop: TopLevelLoops) {
+      printBase(OS, loop, 1);
+    }
+  }
+
 };
 
 void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
-                            LoopStat *LI,
+                            LoopStat *LS,
                             const DomTreeBase<BB> &DomTree) {
   typedef GraphTraits<Inverse<BB *>> InvBlockTraits;
 
@@ -129,20 +197,20 @@ void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
     BB *PredBB = ReverseCFGWorklist.back();
     ReverseCFGWorklist.pop_back();
 
-    Loop *Subloop = LI->getLoopFor(PredBB);
+    Loop *Subloop = LS->getLoopFor(PredBB);
     if (!Subloop) {
-    if (!DomTree.isReachableFromEntry(PredBB))
-      continue;
-
-      // This is an undiscovered block. Map it to the current loop.
-      LI->changeLoopFor(PredBB, L);
-      ++NumBlocks;
-      if (PredBB == L->getHeader())
+      if (!DomTree.isReachableFromEntry(PredBB))
         continue;
-      // Push all block predecessors on the worklist.
-      ReverseCFGWorklist.insert(ReverseCFGWorklist.end(),
-                    InvBlockTraits::child_begin(PredBB),
-                    InvBlockTraits::child_end(PredBB));
+
+        // This is an undiscovered block. Map it to the current loop.
+        LS->changeLoopFor(PredBB, L);
+        ++NumBlocks;
+        if (PredBB == L->getHeader())
+          continue;
+        // Push all block predecessors on the worklist.
+        ReverseCFGWorklist.insert(ReverseCFGWorklist.end(),
+                      InvBlockTraits::child_begin(PredBB),
+                      InvBlockTraits::child_end(PredBB));
     } else {
       // This is a discovered block. Find its outermost discovered loop.
       while (Loop *Parent = Subloop->getParentLoop())
@@ -161,18 +229,17 @@ void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
       // reach another subloop that is not yet discovered to be a subloop of
       // this loop, which we must traverse.
       for (const auto Pred : children<Inverse<BB *>>(PredBB)) {
-        if (LI->getLoopFor(Pred) != Subloop)
+        if (LS->getLoopFor(Pred) != Subloop)
         ReverseCFGWorklist.push_back(Pred);
       }
     }
   }
-  // TODO: what is it?
-  // L->getSubLoopsVector().reserve(NumSubloops);
-  // L->reserveBlocks(NumBlocks);
+
 }
 
 struct LoopStatisticsPass : public FunctionPass {
   static char ID; // Pass identification, replacement for typeid
+  LoopStat LS;
 
   LoopStatisticsPass() : FunctionPass(ID) {
     initializeLoopStatisticsPassPass(*PassRegistry::getPassRegistry());
@@ -181,10 +248,13 @@ struct LoopStatisticsPass : public FunctionPass {
   bool runOnFunction(Function &F) override {
     if (skipFunction(F))
       return false;
-    // LoopInfo &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-    // std::error_code err;
-    // raw_fd_ostream outfile_li(StringRef("loop_info.txt"), err);
-    // LI.print(outfile_li);
+    DominatorTree DT(F);
+    LS.analyze(DT);
+    
+    std::error_code err;
+    raw_fd_ostream outfile_ls(StringRef(F.getName().str() + "_ls.txt"), err);
+    print(outfile_ls, &F);
+    
     return true;
   }
 
@@ -193,6 +263,12 @@ struct LoopStatisticsPass : public FunctionPass {
     AU.setPreservesCFG();
     // AU.addPreserved<LoopInfoWrapperPass>();
     AU.addPreserved<GlobalsAAWrapperPass>();
+  }
+
+  void print(raw_ostream &OS, const Function *F) const {
+    OS << F->getName() << "{\n";
+    LS.print(OS);
+    OS << "}\n\n";
   }
 };
 

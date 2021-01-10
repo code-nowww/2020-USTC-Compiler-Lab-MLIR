@@ -18,7 +18,7 @@
 #include "optimization/LoopStatisticsPass.hpp"
 #include "optimization/MyPasses.hpp"
 
-#include "llvm/Analysis/LoopInfo.h"
+// #include "llvm/Analysis/LoopInfo.h"
 
 using namespace llvm;
 using namespace clang;

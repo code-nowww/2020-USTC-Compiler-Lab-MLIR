@@ -58,6 +58,9 @@ namespace llvm {
 namespace {
 class Loop;
 class LoopStat;
+
+using LoopStatPtr = std::shared_ptr<LoopStat>;
+
 void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
                            LoopStat *LI,
                            const DomTreeBase<BB> &DomTree);
@@ -164,20 +167,22 @@ public:
 
   void changeLoopFor(BB* block, Loop* L) { BBMap[block] = L; }
 
-  void printBase(raw_ostream &OS, Loop* loop, size_t indent) const {
+  void printBase(raw_ostream &OS, Loop* loop, size_t Indent) const {
     std::string IndentStr = "";
-    for(size_t i = 0; i < indent; i++) {
+    for(size_t i = 0; i < Indent; i++) {
       IndentStr += "\t";
     }
-    OS << IndentStr << loop->getLabel() << "\n";
-    for (auto SubLoop: loop->getSubLoops()) {
-      printBase(OS, SubLoop, indent + 1);
-    }
+    OS << IndentStr << "\"" << loop->getLabel() << "\": {\n";
+      OS << IndentStr << "\t\"depth\": " << Indent - 1 << "\n";
+      for (auto SubLoop: loop->getSubLoops()) {
+        printBase(OS, SubLoop, Indent + 1);
+      }
+    OS << IndentStr << "}\n";
   }
 
-  void print(raw_ostream &OS) const {
+  void print(raw_ostream &OS, size_t Indent) const {
     for (auto loop: TopLevelLoops) {
-      printBase(OS, loop, 1);
+      printBase(OS, loop, Indent);
     }
   }
 
@@ -239,7 +244,7 @@ void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
 
 struct LoopStatisticsPass : public FunctionPass {
   static char ID; // Pass identification, replacement for typeid
-  LoopStat LS;
+  LoopStatPtr LS;
 
   LoopStatisticsPass() : FunctionPass(ID) {
     initializeLoopStatisticsPassPass(*PassRegistry::getPassRegistry());
@@ -249,7 +254,8 @@ struct LoopStatisticsPass : public FunctionPass {
     if (skipFunction(F))
       return false;
     DominatorTree DT(F);
-    LS.analyze(DT);
+    LS.reset(new LoopStat());
+    LS->analyze(DT);
     
     std::error_code err;
     raw_fd_ostream outfile_ls(StringRef(F.getName().str() + "_ls.txt"), err);
@@ -266,9 +272,11 @@ struct LoopStatisticsPass : public FunctionPass {
   }
 
   void print(raw_ostream &OS, const Function *F) const {
-    OS << F->getName() << "{\n";
-    LS.print(OS);
-    OS << "}\n\n";
+    OS << "{\n";
+      OS << "\t\"" << F->getName().str() << "\": {\n";
+        LS->print(OS, 2);
+      OS << "\t}\n\n";
+    OS << "}";
   }
 };
 

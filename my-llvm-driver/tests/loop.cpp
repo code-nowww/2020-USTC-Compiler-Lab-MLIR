@@ -1,16 +1,16 @@
-// void test() {
-//     int num = 0;
-//     L2:
-//         for(int i=0;i<10;i++){
-//             for(int j=i;j<10;j++){
-//                 num++;
-//             }
-//         }
-//         while (num < 10) {
-//             num++;
-//         }
-//     goto L2;
-// }
+void test() {
+    int num = 0;
+    L2:
+        for(int i=0;i<10;i++){
+            for(int j=i;j<10;j++){
+                num++;
+            }
+        }
+        while (num < 10) {
+            num++;
+        }
+    goto L2;
+}
 
 int main(){
     int num = 0;

@@ -60,25 +60,26 @@ class Loop;
 class LoopStat;
 
 using LoopStatPtr = std::shared_ptr<LoopStat>;
+using LoopPtr = std::shared_ptr<Loop>;
 
-void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
-                           LoopStat *LI,
+void discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
+                           LoopStat* LI,
                            const DomTreeBase<BB> &DomTree);
 
 class Loop {
 private:
   std::string Label;
-  Loop* ParentLoop;
+  LoopPtr ParentLoop;
   BB* Header;
-  std::vector<Loop*> SubLoops;
+  std::vector<LoopPtr> SubLoops;
 
 public:
   Loop(BB* Header, std::string Label): Header(Header), Label(Label), ParentLoop(nullptr) {}
   BB* getHeader() { return Header; }
-  Loop* getParentLoop() const { return ParentLoop; }
-  void setParentLoop(Loop* L) { ParentLoop = L; }
-  std::vector<Loop*> getSubLoops() { return SubLoops; }
-  void addSubLoop(Loop* loop) { SubLoops.push_back(loop); }
+  LoopPtr getParentLoop() const { return ParentLoop; }
+  void setParentLoop(LoopPtr L) { ParentLoop = L; }
+  std::vector<LoopPtr> getSubLoops() { return SubLoops; }
+  void addSubLoop(LoopPtr loop) { SubLoops.push_back(loop); }
   std::string getLabel() { return Label; }
   void setLabel(std::string Label) { this->Label = Label; }
   void reverseSubLoops() { std::reverse(SubLoops.begin(), SubLoops.end()); }
@@ -99,16 +100,16 @@ public:
 class LoopStat {
 private:
   size_t LoopCounter = 0;
-  std::map<const BasicBlock *, Loop *> BBMap;
-  std::vector<Loop*> Loops;
-  std::vector<Loop*> TopLevelLoops;
+  std::map<const BasicBlock *, LoopPtr> BBMap;
+  std::vector<LoopPtr> Loops;
+  std::vector<LoopPtr> TopLevelLoops;
 
 public:
   LoopStat() {}
 
-  Loop* allocateLoop(BB* Header) {
+ LoopPtr allocateLoop(BB* Header) {
     std::string Label = "Loop" + std::to_string(LoopCounter++);
-    return new Loop(Header, Label);
+    return LoopPtr(new Loop(Header, Label));
   }
 
   void analyze(const DominatorTree &DomTree) {
@@ -129,20 +130,20 @@ public:
       }
       // Perform a backward CFG traversal to discover and map blocks in this loop.
       if (!Backedges.empty()) {
-        Loop* L = allocateLoop(Header);
+        LoopPtr L = allocateLoop(Header);
         Loops.push_back(L);
         discoverAndMapSubloop(L, ArrayRef<BasicBlock *>(Backedges), this, DomTree);
       }
     }
     // make the nested loops tree.
-    std::set<Loop*> DoneSet;
+    std::set<LoopPtr> DoneSet;
     std::reverse(Loops.begin(), Loops.end());
-    for (Loop* loop: Loops) {
+    for (LoopPtr loop: Loops) {
       if (!loop->getParentLoop()) {
         TopLevelLoops.push_back(loop);
         continue;
       }
-      Loop* parent = nullptr;
+      LoopPtr parent = nullptr;
       while (parent = loop->getParentLoop()) {
         // TODO: use find might be more efficient
         if (DoneSet.count(loop) > 0) break;
@@ -159,15 +160,15 @@ public:
     
   }
 
-  Loop* getLoopFor(BB* block) { 
+  LoopPtr getLoopFor(BB* block) { 
     auto loop = BBMap.find(block);
     if (loop == BBMap.end()) return nullptr;
     else return loop->second;
   }
 
-  void changeLoopFor(BB* block, Loop* L) { BBMap[block] = L; }
+  void changeLoopFor(BB* block, LoopPtr L) { BBMap[block] = L; }
 
-  void printBase(raw_ostream &OS, Loop* loop, size_t Indent) const {
+  void printBase(raw_ostream &OS, LoopPtr loop, size_t Indent) const {
     std::string IndentStr = "";
     for(size_t i = 0; i < Indent; i++) {
       IndentStr += "\t";
@@ -188,9 +189,9 @@ public:
 
 };
 
-void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
-                            LoopStat *LS,
-                            const DomTreeBase<BB> &DomTree) {
+void discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
+                           LoopStat* LS,
+                           const DomTreeBase<BB> &DomTree) {
   typedef GraphTraits<Inverse<BB *>> InvBlockTraits;
 
   unsigned NumBlocks = 0;
@@ -202,7 +203,7 @@ void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
     BB *PredBB = ReverseCFGWorklist.back();
     ReverseCFGWorklist.pop_back();
 
-    Loop *Subloop = LS->getLoopFor(PredBB);
+    LoopPtr Subloop = LS->getLoopFor(PredBB);
     if (!Subloop) {
       if (!DomTree.isReachableFromEntry(PredBB))
         continue;
@@ -218,7 +219,7 @@ void discoverAndMapSubloop(Loop *L, ArrayRef<BB *> Backedges,
                       InvBlockTraits::child_end(PredBB));
     } else {
       // This is a discovered block. Find its outermost discovered loop.
-      while (Loop *Parent = Subloop->getParentLoop())
+      while (LoopPtr Parent = Subloop->getParentLoop())
         Subloop = Parent;
 
       // If it is already discovered to be a subloop of this loop, continue.

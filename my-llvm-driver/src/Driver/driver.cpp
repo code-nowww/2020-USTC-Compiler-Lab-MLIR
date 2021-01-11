@@ -155,6 +155,7 @@ bool Driver::runChecker() {
     if(Res == true) {
         std::cout << "Execute AnalysisAction Success" << std::endl;
     }
+    return Res;
 }
 
 void Driver::addPass(FunctionPass *_p){

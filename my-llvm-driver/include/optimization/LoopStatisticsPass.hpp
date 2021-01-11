@@ -93,7 +93,7 @@ public:
   
   // restructure
   void reverseSubLoops() { std::reverse(SubLoops.begin(), SubLoops.end()); }
-  void* relabelAndReorderLoop(std::string Label) {
+  void relabelAndReorderLoop(std::string Label) {
     setLabel(Label);
     size_t SubLoopSize = SubLoops.size();
     for (size_t i = 0; i < SubLoopSize; i++) {
@@ -151,7 +151,7 @@ public:
         continue;
       }
       LoopPtr parent = nullptr;
-      while (parent = L->getParentLoop()) {
+      while ((parent = L->getParentLoop()) != nullptr) {
         // TODO: use find might be more efficient
         if (DoneSet.count(L) > 0) break;
         parent->addSubLoop(L);

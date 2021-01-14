@@ -31,5 +31,6 @@
 *.out
 *.app
 
+my-llvm-driver/diagram
 my-llvm-driver/tests/*.png
 *.dot

@@ -121,18 +121,45 @@ classDiagram
         getLoopFor(BB* block)
         changeLoopFor(BB* block, LoopPtr L)
         printBase(raw_ostream &OS, LoopPtr L, size_t Indent)
-        discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges, LoopStat* LS, const DomTreeBase<BB> &DomTree)
+        print(raw_ostream &OS, size_t Indent)
     }
 ```
 
 及一个函数
 ```cpp
 discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
-                           LoopStat* LS,
-                           const DomTreeBase<BB> &DomTree) 
+                      LoopStat* LS,
+                      const DomTreeBase<BB> &DomTree) 
 ```
 
-根据其名字很容易知道它们的作用, 这里就不过多解释了.
+根据其名字很容易知道它们的作用, 
+
+- Loop: 循环类
+    - 成员变量:
+        - Label: 循环名称/标记
+        - ParentLoop: 记录本 Loop 的父 Loop
+        - Header: 记录本 Loop 的header. 按照正常语法结构写出的结果, 循环都会有相应的 Header
+        - SubLoops: 子循环 vector
+    - 成员函数:
+        - getHeader(): 获取本循环对应的 Header
+        - getParentLoop(), setParentLoop(): 获取/设置父循环
+        - getSubLoops(), addSubLoop(): 对于 SubLoops vector 的操作.
+        - getLabel(), setLabel(): 获取/设置 Label
+        - reverseSubLoops(), relabelAndReorderLoop(): 两个不是很重要的重构函数
+- LoopStat: 循环信息类, 一般统计一个函数内的循环信息只需要构建一个这样的对象.
+    - 成员变量:
+        - LoopCounter: 找到的循环的计数器
+        - Loops: 分配了的循环们
+        - TopLevelLoops: 顶级循环, 是指一个函数内最外层的循环构成的 vector
+        - BBMap: 从 BasicBlock 到 Loop 的映射
+    - 成员函数:
+        - allocateLoop(): 分配 Loop. 会修改在 `LoopCounter` 和 `Loops`.
+        - **analyze(const DominatorTree &DomTree)**: 分析回边的核心函数, 会在此调用 `discoverAndMapSubloop`.
+        - getLoopFor(BB* block), changeLoopFor(BB* block, LoopPtr L): 获取/改变一个 `BasicBlock` 所属的最近循环
+        - printBase(raw_ostream &OS, LoopPtr L, size_t Indent), print(raw_ostream &OS, size_t Indent): 输出函数, 调用 `printBase` 递归地 print.
+- **discoverAndMapSubloop(...)**: 分析逆向流图的核心函数.
+    
+        
 
 最核心的处理整个过程的是两个函数, 一个是 `LoopStat` 的  `analyze`, 一个是函数 `discoverAndMapSubloop`.
 - `analyze` 函数就是前述用于后序遍历支配树的一个函数, 它会把找到的回边加入对应的 vector 中([步骤1](#step1)), 传给 `discoverAndMapSubloop`. 并在最后生成 循环嵌套树([步骤5](#step5))

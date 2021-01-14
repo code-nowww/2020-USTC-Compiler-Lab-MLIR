@@ -15,7 +15,7 @@
 
 #include "Driver/driver.h"
 #include "optimization/LoopSearchPass.hpp"
-#include "optimization/LoopStatisticsPass.hpp"
+#include "Analysis/LoopStatisticsPass.hpp"
 #include "optimization/MyPasses.hpp"
 
 // #include "llvm/Analysis/LoopInfo.h"

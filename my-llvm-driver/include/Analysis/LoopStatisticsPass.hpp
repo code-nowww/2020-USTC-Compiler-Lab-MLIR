@@ -82,7 +82,7 @@ public:
   // parent loop
   LoopPtr getParentLoop() const { return ParentLoop; }
   void setParentLoop(LoopPtr L) { ParentLoop = L; }
-
+  
   // subloop
   std::vector<LoopPtr> getSubLoops() { return SubLoops; }
   void addSubLoop(LoopPtr L) { SubLoops.push_back(L); }

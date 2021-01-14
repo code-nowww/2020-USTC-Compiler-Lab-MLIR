@@ -5,5 +5,5 @@ int main()
 	while(0);
 	do
 		i++;
-	while(0);
+	while(i<5);
 }

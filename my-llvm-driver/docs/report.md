@@ -142,6 +142,77 @@ discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
 
 输出结果除了增加了一个函数名以外, 和助教给出的 `json` 无异.
 
+###### 自然循环和另一种循环定义的处理
+
+  我们实际分析时对于循环的定义是**自然循环**。但实际上循环还有另一种定义，即从一个顶点出发并回到该顶点的一条路径，且该路径上的其它都被该顶点支配。本样例说明了我们仅仅分析自然循环。
+  
+  实例代码文件参见`tests/loop1.cpp`。
+  ```c++
+  int main(){
+    for(int i = 0; i < 5; i++){
+      for(int j = 0; j < 10; j++){
+        if(i < j){
+          break;
+        }
+        else{
+          continue;
+        }
+      }
+    }
+  }
+  ```
+  生成的控制流图
+  ![](image/loop1.png)
+  分析结果
+  ```text
+  {
+	"main": {
+		"L1": {
+			"depth": 1
+			"L11": {
+				"depth": 2
+			}
+		}
+	}
+  }
+  ```
+  从图中可以看到如果根据另一种循环的定义，将会得到三个循环(左侧`for.body3`的T和F情况分支出两个循环)，但实际上我们分析得到的只有两个循环，因此我们的结果是符合自然循环定义的。
+
+###### 两个循环共用一个`header`的处理
+  我们的测试参照LLVM中对循环的定义，在[LLVM对循环的定义中](https://llvm.org/docs/LoopTerminology.html)，当两个循环共用一个`header`的时候，LLVM会认为这不是两个循环，而是一个循环。
+  > It is not possible that two loops share only a few of their nodes. Two loops are either disjoint or one is nested inside the other. In the example below the left and right subsets both violate the maximality condition. Only the merge of both sets is considered a loop.
+  > 
+  > ![](https://llvm.org/docs/_images/loop-nonmaximal.svg)
+
+  实例代码文件参见`tests/loop2.cpp`
+  ```c++
+  int main(){
+    int i;
+    L1:
+      if(i)
+          goto L2;
+      else
+        goto L3;
+    L2:
+      goto L1;
+    L3:
+      goto L1;
+  }
+  ```
+  生成的控制流图
+  ![](image/loop2.png)
+  分析结果
+  ```text
+  {
+	"main": {
+		"L1": {
+			"depth": 1
+		}
+	}
+  }
+  ```
+  从该样例中可以看到虽然在流图中看起来有两个循环，分别是从`L2,L3`指向`L1`的回边，但实际分析得到的结果仅识别出了一个循环，这是由于两条回边共用了一个`header`导致的，这是符合LLVM的循环定义的。
+
 ###### 跨函数的循环处理  
   需要说明的是，这里不认为在一个函数的循环结构中调用了另一个含有循环的函数会增加嵌套的层数，实例代码参见`tests/loop3.cpp`，简写如下：
   ```c++
@@ -184,41 +255,6 @@ L1:depth=1
 这里的流图（为了节省篇幅没给出，您可以在`docs/images/loop4.png`中查看），并不是完全的嵌套关系，较难通过流图欢迎嵌套深度，在此处通过引入并列的循环来参考llvm对这种情况下的嵌套深度处理方式。  
 此处L1代表最外层的while，L11表示内层的do...while语句，L112表示了goto所构造的循环，L1121是goto语句进入的for循环。  
 这可能是由于考虑到goto进入do...while后直接退出所生成的循环。  
-
-
-###### 测试样例`loop1.cpp`
-
-  我们实际分析时对于循环的定义是**自然循环**。但实际上循环还有另一种定义，即从一个顶点出发并回到该顶点的一条路径，且该路径上的其它都被该顶点支配。本样例说明了我们仅仅分析自然循环。
-  ```c++
-  int main(){
-    for(int i = 0; i < 5; i++){
-      for(int j = 0; j < 10; j++){
-        if(i < j){
-          break;
-        }
-        else{
-          continue;
-        }
-      }
-    }
-  }
-  ```
-  生成的控制流图
-  ![](image/loop1.png)
-  分析结果
-  ```text
-  {
-	"main": {
-		"L1": {
-			"depth": 1
-			"L11": {
-				"depth": 2
-			}
-		}
-	}
-  }
-  ```
-  从图中可以看到如果根据另一种循环的定义，将会得到三个循环(左侧`for.body3`的T和F情况分支出两个循环)，但实际上我们分析得到的只有两个循环，因此我们的结果是符合自然循环定义的。
 
 - 测试样例`loop5.cpp`
   

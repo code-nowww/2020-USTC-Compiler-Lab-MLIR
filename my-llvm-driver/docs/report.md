@@ -163,7 +163,7 @@ discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
 
 
 
-![.main.png](image/.main.png)
+![loop5.png](image/loop5.png)
 
 
 ##### 参考资料

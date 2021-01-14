@@ -256,9 +256,9 @@ L1:depth=1
 此处L1代表最外层的while，L11表示内层的do...while语句，L112表示了goto所构造的循环，L1121是goto语句进入的for循环。  
 这可能是由于考虑到goto进入do...while后直接退出所生成的循环。  
 
-- 测试样例`loop5.cpp`
-  
-不完成的循环结构造成流图与原代码结构差别较大的情况
+###### 死循环造成的嵌套退化
+
+测试样例`loop5.cpp`
 
   ```c++
     int main()
@@ -268,7 +268,6 @@ L1:depth=1
                 while(0);
                 for(;;);
 	}
-
   }
   ```
 
@@ -291,6 +290,39 @@ L1:depth=1
         }
   }
   ```
+
+###### do-while循环特有的退化
+
+测试样例`loop6.cpp`如下
+
+```c++
+int main()
+{
+        int i;
+        do;
+        while(0);
+        do
+                i++;
+        while(i<5);
+}
+```
+
+生成的控制流图如下
+
+![loop6.png](image/loop6.png)
+
+可以看出，第一个do-while循环因为缺少do.cond而失去了回边，而对于while与for，这种情况不会出现（例如loop5.cpp)
+
+```text
+{
+        "main": {
+                "L1": {
+                        "depth": 1
+                }
+        }
+
+}
+```
 
 ##### 参考资料
 

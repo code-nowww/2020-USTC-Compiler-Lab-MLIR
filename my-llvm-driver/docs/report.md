@@ -1,4 +1,5 @@
 ## 必做部分
+
 #### 1.思考题
 > 在runSemiNCA函数Step 2计算NCA时，如何证明找到的 WIDomCandidate一定是Node[i].Semi和Node[i].Parent的最近共同祖先？  
 > ```c++
@@ -56,3 +57,97 @@
 
 
 综上，计算NCA时找到的`WIDomCandidate`一定是`Node[i].Semi`和`Node[i].Parent`的最近共同祖先，证毕。
+
+#### 2. 循环信息统计
+
+循环信息统计能够帮助我们完成对 `循环` 这一非常常见的结构的优化, 本任务主要要求统计的是循环的深度, 且经咨询助教, 我们得知可以不考虑奇奇怪怪的 `goto` 用法, 因此我们可以
+
+1. 采用[课本](#textbook)上描述的算法 9.7 `构造回边的自然循环` 的思路来寻找循环
+2. 结合它由内向外地逐层搜索循环, 以获取循环及其父循环的关系.
+
+
+##### 算法
+
+首先描述一下课本上的算法, 即构造回边的自然循环:
+
+这里引用书上的说法:
+> 输入: 流图 G 和 回边 $n\rightarrow d$
+> 输出: 由回边 $n\rightarrow d$ 确定的自然循环中所有结点的集合 loop.
+> 方法: 令 loop 初值是 {n, d}. 标记 d 为已访问, 以保证搜索不会超出 d. 从结点 n 开始, 完成对流图 G 的逆向流图的深度优先搜索, 把搜索过程中访问的所有结点都加入 loop. 该过程找出不经过 d 能到达 n 的所有结点.
+
+我们根据这个算法进行一定的**修改**才得到获取各循环深度的算法:
+1. <a id='step1'></a>对支配树进行后序遍历. 在遍历每个结点的时候, 去遍历它在流图中的前驱, 通过 `dominates` 方法来判断支配情况, 以确认是否为回边. 
+2. <a id='step234'></a>找到该结点相应的所有回边后, 就开始做在逆向流图的 DFS.
+3. 在该 DFS 过程中, 若有未发现过的 `BasicBlock`, 就将其标记为当前循环的 `BasicBlock`; 否则它应当已经被之前的更内层的循环标记过, 我们不必理会(不把这个内层循环内的 `BasicBlock` 加入 DFS 的栈中), 只需继续 DFS.
+4. 在前面完成了对整个支配树的后序遍历后, 我们就获得了每个 `BasicBlock` 所属的最近的一层循环, 以及各个循环的父循环. 那么此时只需要遍历一遍所有的循环, 就可以建立其循环嵌套的树.
+5. <a id='step5'></a>一些简单的遍历树并 print
+
+##### 代码结构
+
+核心代码位于 [llvm-ustc-proj/my-llvm-driver/include/Analysis/LoopStatisticsPass.hpp](../include/Analysis/LoopStatisticsPass.hpp).
+
+主要包含有
+
+```mermaid
+classDiagram
+    class Loop {
+        string Label
+        LoopPtr ParentLoop
+        BasicBlock* Header
+        vector<LoopPtr> SubLoops
+        
+        Loop(BB* Header, std::string Label)
+        getHeader()
+
+        LoopPtr getParentLoop()
+        setParentLoop(LoopPtr L)
+        
+        getSubLoops()
+        addSubLoop(LoopPtr L)
+
+        getLabel()
+        setLabel(std::string Label)
+
+        reverseSubLoops()
+        relabelAndReorderLoop(std::string Label)
+    }
+    class LoopStat {
+        size_t LoopCounter = 0;
+        std::map<const BasicBlock *, LoopPtr> BBMap;
+        std::vector<LoopPtr> Loops;
+        std::vector<LoopPtr> TopLevelLoops;
+
+        allocateLoop(BB* Header)
+        analyze(const DominatorTree &DomTree)
+        getLoopFor(BB* block)
+        changeLoopFor(BB* block, LoopPtr L)
+        printBase(raw_ostream &OS, LoopPtr L, size_t Indent)
+        discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges, LoopStat* LS, const DomTreeBase<BB> &DomTree)
+    }
+```
+
+及一个函数
+```cpp
+discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
+                           LoopStat* LS,
+                           const DomTreeBase<BB> &DomTree) 
+```
+
+根据其名字很容易知道它们的作用, 这里就不过多解释了.
+
+最核心的处理整个过程的是两个函数, 一个是 `LoopStat` 的  `analyze`, 一个是函数 `discoverAndMapSubloop`.
+- `analyze` 函数就是前述用于后序遍历支配树的一个函数, 它会把找到的回边加入对应的 vector 中([步骤1](#step1)), 传给 `discoverAndMapSubloop`. 并在最后生成 循环嵌套树([步骤5](#step5))
+- `discoverAndMapSubloop`: 用于发现当前 Loop 的子 Loop 并对相应 `BasicBlock` 设置所属最近循环.([步骤2, 3, 4](#step234))
+
+##### 测试样例及结果解释
+
+输出结果除了增加了一个函数名以外, 和助教给出的 `json` 无异.
+
+
+
+##### 参考资料
+
+- <a id='textbook'></a>高等教育出版社的第 3 版编译原理(陈意云, 张昱著)
+- LLVM 已有的 [LoopInfo](https://llvm.org/docs/LoopTerminology.html?highlight=loopinfo#loopinfo)
+- [mermaid 类图画法](https://www.yzer.club/markdown-mermaid-class-diagram/)
+

@@ -168,9 +168,47 @@ discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
 
 #### Pass 相关部分
 
+我们只需要实现一个
+```cpp
+struct LoopStatisticsPass : public FunctionPass {
+  static char ID; // Pass identification, replacement for typeid
+  LoopStatPtr LS;
+
+  LoopStatisticsPass() : FunctionPass(ID) {
+    initializeLoopStatisticsPassPass(*PassRegistry::getPassRegistry());
+  }
+
+  bool runOnFunction(Function &F) override {
+    if (skipFunction(F))
+      return false;
+    DominatorTree DT(F);
+    LS.reset(new LoopStat());
+    LS->analyze(DT);
+    
+    std::error_code err;
+    raw_fd_ostream outfile_ls(StringRef(F.getName().str() + "_ls.txt"), err);
+    print(outfile_ls, &F);
+    
+    return true;
+  }
+
+  void getAnalysisUsage(AnalysisUsage &AU) const override {...}
+  void print(raw_ostream &OS, const Function *F) const {...}
+};
+
+```
+并通过 `INITIALIZE_PASS` 注册它, 然后在 `main.cpp` 里加入这个 pass 即可完成对我们的 pass 的调用.
+
+而其内容也很简单, `print` 和 `getAnalysisUsage` 相关的代码我就省略了.
+
+核心是 `runOnFunction` 部分, 这里只需要获取支配树(`DT`), 然后调用我们的 `LoopStat` 里的 `analyze` 来分析即可. 最后调用 `print` 即可进行输出.
+
+这一切都会由 LLVM 的 `Manager` 来调度并完成.
+
+
 ### 测试样例及结果解释
 
-输出结果除了增加了一个函数名以外, 和助教给出的 `json` 无异.
+首先声明: 输出结果格式除了增加了一个函数名以外, 和助教给出的 `json` 无异.
 
 #### 自然循环和另一种循环定义的处理
 

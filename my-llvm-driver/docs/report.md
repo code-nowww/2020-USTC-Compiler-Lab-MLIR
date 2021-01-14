@@ -160,6 +160,12 @@ discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
   我们在实际分析时仍然按照对每个不同的函数单独生成循环统计信息的方式进行处理。即`funLoop`中仍然从第一层嵌套开始。
 
 
+
+
+
+![.main.png](image/.main.png)
+
+
 ##### 参考资料
 
 - <a id='textbook'></a>高等教育出版社的第 3 版编译原理(陈意云, 张昱著)

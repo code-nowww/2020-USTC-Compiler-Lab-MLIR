@@ -33,7 +33,7 @@
 ##### 证明  
 > TODO:好像有关于semi和sdom符号指代问题可能需要修改  
 
-记`Node[i].Semi = u,Node[i].Parent=v`, 约定`u>v`表示`u.DFSNum`>`v.DFSNum`, 记$f(x)=x.iDom,f^{(n)}=f*f^{(n-1)}$证明如下:
+记`Node[i].Semi = u,Node[i].Parent=v`, 约定`u>v`表示`u.DFSNum`>`v.DFSNum`, 记$f(x)=x.iDom,f^{(n)}=f(f^{(n-1)})$证明如下:
 
 ###### 1. 若`WIDomCandidate==u`  
 
@@ -143,6 +143,21 @@ discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
 
 输出结果除了增加了一个函数名以外, 和助教给出的 `json` 无异.
 
+- 跨函数的循环处理
+  需要说明的是，这里不认为在一个函数的循环结构中调用了另一个含有循环的函数会增加嵌套的层数，实例代码参见`tests/loop3.cpp`，简写如下：
+  ```c++
+  void funLoop(){
+    for(int i =0;i < 20;i++){
+        ...
+    }
+  }
+  int main(){
+      for(int i=0;i < 10;i++)
+          ...
+          funLoop();
+  }
+  ```
+  我们在实际分析时仍然按照对每个不同的函数单独生成循环统计信息的方式进行处理。即`funLoop`中仍然从第一层嵌套开始。
 
 
 ##### 参考资料

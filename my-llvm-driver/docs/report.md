@@ -28,10 +28,10 @@
 ###### 引理3 
 > Node[i].Parent.DFSNum $\geq$ Node[i].Semi.DFSNum
  
-证明：由于在CFG图上，`i.Parent->i`也是一条半必经路径，其起点为`i.Parnet`，因此`i.semi`作为半必经路径DFSNum最小的首点，一定有`Node[i].Parent.DFSNum $\geq$ Node[i].Semi.DFSNum`。
+证明：由于在CFG图上，`i.Parent->i`也是一条半必经路径，其起点为`i.Parnet`，因此`i.semi`作为半必经路径DFSNum最小的首点，一定有`Node[i].Parent.DFSNum` $\geq$ `Node[i].Semi.DFSNum`。
 
 ##### 证明  
-> TODO:好像有关于semi和sdom符号指代问题可能需要修改  
+> TODO:好像有关于semi和sdom符号指代问题可能需要修改,如果在阅读时有认为有歧义的地方，笔者本意是semi=min{sdom} 
 
 记`Node[i].Semi = u,Node[i].Parent=v`, 约定`u>v`表示`u.DFSNum`>`v.DFSNum`, 记$f(x)=x.iDom,f^{(n)}=f(f^{(n-1)})$证明如下:
 
@@ -54,7 +54,6 @@
 由于`WIDomCandidate!=u`，因此`WIDomCandidate<u`因此在前一步构建支配树中的$w_2$时，由于$w_2$.semi  $\leq w_1$, $w_2$.parent $\leq$ `u`，由假设，存在直接路径$x\rightarrow u,x\rightarrow w_1$,因此`w2.WIDomCandidate` $\leq$ `WIDomCandidate(u,w1)`=x。因此$w_2$在支配树上的parent$\leq$x，与假设中$w_2$在支配树上从x到v的一条路径中不符，假设不成立。  
 
 因此支配树上x到v的路径中不存在小于v的中间节点，因此最终退出while循环的`WIDomCandidate`一定为x，即u和v在支配树上的最近公共祖先。 
-
 
 综上，计算NCA时找到的`WIDomCandidate`一定是`Node[i].Semi`和`Node[i].Parent`的最近共同祖先，证毕。
 
@@ -143,23 +142,51 @@ discoverAndMapSubloop(LoopPtr L, ArrayRef<BB *> Backedges,
 
 输出结果除了增加了一个函数名以外, 和助教给出的 `json` 无异.
 
-- 跨函数的循环处理
+###### 跨函数的循环处理  
   需要说明的是，这里不认为在一个函数的循环结构中调用了另一个含有循环的函数会增加嵌套的层数，实例代码参见`tests/loop3.cpp`，简写如下：
   ```c++
   void funLoop(){
-    for(int i =0;i < 20;i++){
-        ...
-    }
+    for(int i =0;i < 20;i++){...}
   }
   int main(){
       for(int i=0;i < 10;i++)
-          ...
           funLoop();
   }
   ```
-  我们在实际分析时仍然按照对每个不同的函数单独生成循环统计信息的方式进行处理。即`funLoop`中仍然从第一层嵌套开始。
+  我们在实际分析时仍然按照对每个不同的函数单独生成循环统计信息的方式进行处理。即`funLoop`中仍然从第一层嵌套开始。  
 
-- 测试样例`loop1.cpp`
+###### goto进入循环内部
+在`tests/loop4.cpp`中给出了一个goto进入循环内部的测试样例，其代码涉及循环的部分可以简化为
+```c++
+while(i == 1){
+    do{
+        for(int j = 0;j < 10;j++){...}
+    L1:
+        for(;i>8;i++){...}
+    }while(i<10);
+    if(i<5)
+        goto L1;
+    for(int k = 0;k < 6;k++){...}
+}
+```
+
+这个程序在我们的分析pass中其简化结果为：
+
+```c++
+L1:depth=1
+    L11:depth=2
+        L111:depth=3
+        L112:depth=3
+            L1121:depth=4
+    L12:depth=2
+```
+
+这里的流图（为了节省篇幅没给出，您可以在`docs/images/loop4.png`中查看），并不是完全的嵌套关系，较难通过流图欢迎嵌套深度，在此处通过引入并列的循环来参考llvm对这种情况下的嵌套深度处理方式。  
+此处L1代表最外层的while，L11表示内层的do...while语句，L112表示了goto所构造的循环，L1121是goto语句进入的for循环。  
+这可能是由于考虑到goto进入do...while后直接退出所生成的循环。  
+
+
+###### 测试样例`loop1.cpp`
 
   我们实际分析时对于循环的定义是**自然循环**。但实际上循环还有另一种定义，即从一个顶点出发并回到该顶点的一条路径，且该路径上的其它都被该顶点支配。本样例说明了我们仅仅分析自然循环。
   ```c++

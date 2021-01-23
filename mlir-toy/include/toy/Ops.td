@@ -116,6 +116,27 @@ def AddOp : Toy_Op<"add",
   ];
 }
 
+def SubOp : Toy_Op<"sub",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "element-wise substraction operation";
+  let description = [{
+    The "sub" operation performs element-wise substraction between two tensors.
+    The shapes of the tensor operands are expected to match.
+  }];
+
+  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
+  let results = (outs F64Tensor);
+
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseBinaryOp(parser, result); }];
+  let printer = [{ return ::printBinaryOp(p, *this); }];
+
+  // Allow building an AddOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value lhs, Value rhs">
+  ];
+}
+
 def CastOp : Toy_Op<"cast",
     [DeclareOpInterfaceMethods<ShapeInferenceOpInterface>, NoSideEffect,
      SameOperandsAndResultShape]> {

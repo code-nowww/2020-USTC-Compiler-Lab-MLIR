@@ -34,3 +34,6 @@
 my-llvm-driver/diagram
 my-llvm-driver/tests/*.png
 *.dot
+build
+/docs
+.vscode

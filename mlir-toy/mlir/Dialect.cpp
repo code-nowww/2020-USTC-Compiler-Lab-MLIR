@@ -271,6 +271,19 @@ void AddOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 void AddOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 
 //===----------------------------------------------------------------------===//
+// SubOp
+
+void SubOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value lhs, mlir::Value rhs) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({lhs, rhs});
+}
+
+/// Infer the output shape of the SubOp, this is required by the shape inference
+/// interface.
+void SubOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
+
+//===----------------------------------------------------------------------===//
 // CastOp
 
 /// Infer the output shape of the CastOp, this is required by the shape

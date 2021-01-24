@@ -522,6 +522,7 @@ private:
       }
       return builder.create<ConvValidOp>(location, operands[0], operands[1]);
     }
+
     if (callee == "conv_full") {
       if (call.getArgs().size() != 2) {
         emitError(location, "MLIR codegen encountered an error: toy.conv "
@@ -529,6 +530,15 @@ private:
         return nullptr;
       }
       return builder.create<ConvFullOp>(location, operands[0], operands[1]);
+    }
+
+    if (callee == "conv_some") {
+      if (call.getArgs().size() != 2) {
+        emitError(location, "MLIR codegen encountered an error: toy.conv "
+                            "only accept two arguments");
+        return nullptr;
+      }
+      return builder.create<ConvSomeOp>(location, operands[0], operands[1]);
     }
 
     // Otherwise this is a call to a user-defined function. Calls to

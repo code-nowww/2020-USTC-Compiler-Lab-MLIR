@@ -373,6 +373,70 @@ struct ConvFullOpLowering : public ConversionPattern {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// ToyToAffine RewritePatterns: full mode Convolution operations
+//===----------------------------------------------------------------------===//
+
+struct ConvSomeOpLowering : public ConversionPattern {
+  ConvSomeOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::ConvSomeOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+  //getOperand(unsigned idx)  
+    auto loc = op->getLoc();
+    auto targetType = op->getOperand(0).getType().cast<TensorType>();
+    auto kernelType = op->getOperand(1).getType().cast<TensorType>();
+    auto resultType = (*op->result_type_begin()).cast<TensorType>();
+
+    // When lowering the constant operation, we allocate and assign the constant
+    // values to a corresponding memref allocation.
+    auto memRefType = convertTensorToMemRef(resultType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    // Create a nest of affine loops, with one loop per dimension of the shape.
+    // The buildAffineLoopNest function takes a callback that is used to construct
+    // the body of the innermost loop given a builder, a location and a range of
+    // loop induction variables.
+    SmallVector<int64_t, 4> lowerBounds(4, /*Value=*/0);
+    SmallVector<int64_t, 4> upperBounds;
+    SmallVector<int64_t, 4> steps(4, /*Value=*/1);
+    upperBounds.push_back(resultType.getShape().front());
+    upperBounds.push_back(resultType.getShape().back());
+    upperBounds.push_back(kernelType.getShape().front());
+    upperBounds.push_back(kernelType.getShape().back());
+    
+    buildAffineLoopNest(
+      rewriter, loc, lowerBounds, upperBounds, steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+        toy::ConvFullOpAdaptor ConvSomeAdaptor(operands);
+        Value target = ConvSomeAdaptor.target();
+        Value kernel = ConvSomeAdaptor.kernel();
+        
+        SmallVector<AffineExpr, 2> inputExprs, kernelExprs, resultExprs;
+        /// getAffineDimExpr:position:Position of this identifier in the argument list.
+        inputExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()) + getAffineDimExpr(2, nestedBuilder.getContext()));
+        inputExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()) + getAffineDimExpr(3, nestedBuilder.getContext()));
+        kernelExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
+        kernelExprs.push_back(getAffineDimExpr(3, nestedBuilder.getContext()));
+        resultExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+        resultExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+        auto LoadedInput = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(4, 0, inputExprs, nestedBuilder.getContext()), ivs);
+        auto LoadedKernel = nestedBuilder.create<AffineLoadOp>(loc, kernel, AffineMap::get(4, 0, kernelExprs, nestedBuilder.getContext()), ivs);
+        auto mulResult = nestedBuilder.create<MulFOp>(loc, LoadedInput, LoadedKernel);
+        auto LoadedResult = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(4, 0, resultExprs, nestedBuilder.getContext()), ivs);
+        auto addResult = nestedBuilder.create<AddFOp>(loc, mulResult, LoadedResult);
+        nestedBuilder.create<AffineStoreOp>(loc, addResult, alloc, AffineMap::get(4, 0, resultExprs, nestedBuilder.getContext()), ivs);
+      });
+
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
+
 } // end anonymous namespace.
 
 //===----------------------------------------------------------------------===//
@@ -424,7 +488,7 @@ void ToyToAffineLoweringPass::runOnFunction() {
   OwningRewritePatternList patterns;
   patterns.insert<AddOpLowering, SubOpLowering, ConstantOpLowering, MulOpLowering,
                   ReturnOpLowering, TransposeOpLowering, ConvValidOpLowering, 
-                  ConvFullOpLowering>(&getContext());
+                  ConvFullOpLowering, ConvSomeOpLowering>(&getContext());
 
   // With the target and rewrite patterns defined, we can now attempt the
   // conversion. The conversion will signal failure if any of our `illegal`

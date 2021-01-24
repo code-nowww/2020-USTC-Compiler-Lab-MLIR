@@ -284,7 +284,7 @@ void SubOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 void SubOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 
 //===----------------------------------------------------------------------===//
-// ConvOp
+// ConvValidOp
 
 void ConvValidOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value target, mlir::Value kernel) {
@@ -340,6 +340,65 @@ static mlir::LogicalResult verify(ConvValidOp op) {
   }
   return mlir::success();
 }
+
+
+//===----------------------------------------------------------------------===//
+// ConvFullOp
+
+void ConvFullOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value target, mlir::Value kernel) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({target, kernel});
+}
+
+/// Infer the output shape of the ConvOp, this is required by the shape inference
+/// interface.
+void ConvFullOp::inferShapes() { 
+  //getResult().setType(getOperand(0).getType()); 
+  auto targetTy = getOperand(0).getType().cast<RankedTensorType>();
+  auto kernelTy = getOperand(1).getType().cast<RankedTensorType>();
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(targetTy.getShape().vec()[0] + kernelTy.getShape().vec()[0] + 1);
+  dims.push_back(targetTy.getShape().vec()[1] + kernelTy.getShape().vec()[1] + 1);
+  //TODO:how to extend???
+  //SmallVector<int64_t, 2> dims(llvm::reverse(targetTy.getShape()));
+  getResult().setType(RankedTensorType::get(dims, targetTy.getElementType()));
+
+}
+
+static mlir::LogicalResult verify(ConvFullOp op) {
+  auto targetType = op.getOperand(0).getType().dyn_cast<RankedTensorType>();
+  auto kernelType = op.getOperand(1).getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!targetType || !kernelType || !resultType)
+    return mlir::success();
+
+  auto inputShape = targetType.getShape().vec();
+  auto kernelShape = kernelType.getShape().vec();
+  auto resultShape = resultType.getShape().vec();
+   if (resultShape[0]!= inputShape[0] + kernelShape[0] + 1) {
+    return op.emitError()
+           << "error in the Conv2d OP's result shape[0]";
+  }
+  if (resultShape[1]!= inputShape[1] + kernelShape[1] + 1) {
+    return op.emitError()
+           << "error in the Conv2d OP's result shape[1]";
+  }
+  if (resultShape[0] < 0) {
+    return op.emitError()
+           << "Convolution kernel size should be smaller than the input size";
+  }
+  if (resultShape[1] < 0) {
+    return op.emitError()
+           << "Convolution kernel size should be smaller than the input size";
+  }
+  if (targetType.getElementType() != kernelType.getElementType()) {
+    return op.emitError()
+           << "error in the Conv2d OP's operands type, should have same type";
+  }
+  return mlir::success();
+}
+
 
 //===----------------------------------------------------------------------===//
 // CastOp

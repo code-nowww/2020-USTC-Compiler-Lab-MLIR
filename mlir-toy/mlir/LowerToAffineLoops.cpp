@@ -125,8 +125,76 @@ struct BinaryOpLowering : public ConversionPattern {
 };
 using AddOpLowering = BinaryOpLowering<toy::AddOp, AddFOp>;
 using SubOpLowering = BinaryOpLowering<toy::SubOp, SubFOp>;
-using MatrixMulOpLowering = BinaryOpLowering<toy::MatrixMulOp, MatrixMulFOp>;
 using MulOpLowering = BinaryOpLowering<toy::MulOp, MulFOp>;
+
+//===----------------------------------------------------------------------===//
+// ToyToAffine RewritePatterns: MatrixMul operations
+//===----------------------------------------------------------------------===//
+
+struct MatrixMulOpLowering : public ConversionPattern {
+  MatrixMulOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::MatrixMulOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    
+    // Modified from lowerOpToLoops
+    auto loc = op->getLoc();
+    auto tensorType = (*op->result_type_begin()).cast<TensorType>();
+    
+    // Insert an allocation and deallocation for the result of this operation.
+    auto memRefType = convertTensorToMemRef(tensorType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    SmallVector<int64_t, 4> LowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 4> Steps(2, /*Value=*/1);
+    
+    buildAffineLoopNest(
+        rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
+        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+          const APFloat zero(0.0);
+          nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF64Type()), alloc, ivs);
+        });
+    
+    SmallVector<int64_t, 4> loopShape;
+    SmallVector<int64_t, 4> loopLowerBounds(3, /*Value=*/0);
+    SmallVector<int64_t, 4> steps(3, /*Value=*/1); 
+
+    loopShape.push_back(op->getOperand(0).getType().cast<TensorType>().getShape().vec()[0]);
+    loopShape.push_back(op->getOperand(0).getType().cast<TensorType>().getShape().vec()[1]);
+    loopShape.push_back(op->getOperand(1).getType().cast<TensorType>().getShape().vec()[1]);
+    
+    buildAffineLoopNest(
+        rewriter, loc, loopLowerBounds, loopShape, steps,
+        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+          toy::MatrixMulOpAdaptor MatrixMulAdaptor(operands);
+          Value lhs = MatrixMulAdaptor.lhs();
+          Value rhs = MatrixMulAdaptor.rhs();
+
+          SmallVector<AffineExpr, 2> lhsExprs, rhsExprs, resultExprs;
+
+          lhsExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+          lhsExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+          rhsExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+          rhsExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
+          resultExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+          resultExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
+
+          auto LoadedLhs = nestedBuilder.create<AffineLoadOp>(loc, lhs, AffineMap::get(3, 0, lhsExprs, nestedBuilder.getContext()), ivs);
+          auto LoadedRhs = nestedBuilder.create<AffineLoadOp>(loc, rhs, AffineMap::get(3, 0, rhsExprs, nestedBuilder.getContext()), ivs);
+          auto mulResult = nestedBuilder.create<MulFOp>(loc, LoadedLhs, LoadedRhs);
+          auto LoadedResult = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(3, 0, resultExprs, nestedBuilder.getContext()), ivs);
+          auto addResult = nestedBuilder.create<AddFOp>(loc, mulResult, LoadedResult);
+          nestedBuilder.create<AffineStoreOp>(loc, addResult, alloc, AffineMap::get(3, 0, resultExprs, nestedBuilder.getContext()), ivs);
+        });
+
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
 
 //===----------------------------------------------------------------------===//
 // ToyToAffine RewritePatterns: Constant operations

@@ -514,9 +514,9 @@ private:
       return builder.create<TransposeOp>(location, operands[0]);
     }
     if (callee == "matrixmul") {
-      if (call.getArgs().size() != 1) {
-        emitError(location, "MLIR codegen encountered an error: toy.transpose "
-                            "does not accept multiple arguments");
+      if (call.getArgs().size() != 2) {
+        emitError(location, "MLIR codegen encountered an error: toy.matrixmul "
+                            "accepts wrong number of arguments");
         return nullptr;
       }
       return builder.create<MatrixMulOp>(location, operands[0],operands[1]);

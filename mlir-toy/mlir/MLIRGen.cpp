@@ -335,8 +335,6 @@ private:
       return builder.create<AddOp>(location, lhs, rhs);
     case '-':
       return builder.create<SubOp>(location, lhs, rhs);
-    case '@':
-      return builder.create<MatrixMulOp>(location, lhs, rhs);
     case '*':
       return builder.create<MulOp>(location, lhs, rhs);
     }
@@ -514,6 +512,14 @@ private:
         return nullptr;
       }
       return builder.create<TransposeOp>(location, operands[0]);
+    }
+    if (callee == "matrixmul") {
+      if (call.getArgs().size() != 1) {
+        emitError(location, "MLIR codegen encountered an error: toy.transpose "
+                            "does not accept multiple arguments");
+        return nullptr;
+      }
+      return builder.create<MatrixMulOp>(location, operands[0],operands[1]);
     }
 
     // Otherwise this is a call to a user-defined function. Calls to

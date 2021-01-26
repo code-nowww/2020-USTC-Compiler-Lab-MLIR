@@ -116,6 +116,34 @@ def AddOp : Toy_Op<"add",
   ];
 }
 
+def MatrixMulOp : Toy_Op<"matrixmul",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "element-wise matrix multiplication operation";
+  let description = [{
+    The "matrixmul" operation performs element-wise matrix multiplication between two tensors.
+    The shapes of the tensor operands are expected to match.
+  }];
+  
+  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $lhs `:` type($lhs) `,` $rhs `:` type($rhs) `)` attr-dict `to` type(results)
+  }];
+
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseBinaryOp(parser, result); }];
+  let printer = [{ return ::printBinaryOp(p, *this); }];
+
+  // Allow building a matrixmul with from the input operand.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value lhs, Value rhs">
+  ];
+
+  // Invoke a static verify method to verify this matrixmul operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
 def SubOp : Toy_Op<"sub",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "element-wise substraction operation";

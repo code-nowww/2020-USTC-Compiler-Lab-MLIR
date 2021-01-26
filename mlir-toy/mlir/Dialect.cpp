@@ -562,6 +562,46 @@ static mlir::LogicalResult verify(ConvSomeOp op) {
   if (targetType.getElementType() != kernelType.getElementType()) {
     return op.emitError()
            << "error in the Conv2d OP's operands type, should have same type";
+// MatrixMulOp
+
+void MatrixMulOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                        mlir::Value lhs, mlir::Value rhs) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({lhs, rhs});
+}
+
+/// Infer the output shape of the MatrixMulOp, this is required by the shape inference interface.
+/// Modified from TransposeOp
+void MatrixMulOp::inferShapes() {
+  auto lhsTy = getOperand(0).getType().cast<RankedTensorType>();
+  auto rhsTy = getOperand(1).getType().cast<RankedTensorType>();
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(lhsTy.getShape().vec()[0]);
+  dims.push_back(rhsTy.getShape().vec()[1]);
+  getResult().setType(RankedTensorType::get(dims, lhsTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(MatrixMulOp op) {
+  auto lhsType = op.getOperand(0).getType().dyn_cast<RankedTensorType>();
+  auto rhsType = op.getOperand(1).getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!lhsType || !rhsType || !resultType)
+    return mlir::success();
+
+  auto resultShape = resultType.getShape().vec();
+  auto lhsShape = lhsType.getShape().vec();
+  auto rhsShape = rhsType.getShape().vec();
+  if (lhsType.getElementType() != rhsType.getElementType()) {
+    return op.emitError()
+           << "inputs type should be matched";
+  }
+  if (lhsShape[1] != rhsShape[0]) {
+    return op.emitError()
+           << "inputs dimension should be matched";
+  }
+  if ((resultShape[0] != lhsShape[0])||(resultShape[1] != rhsShape[1])) {
+    return op.emitError()
+           << "expected result shape to be a multiplication of the inputs";
   }
   return mlir::success();
 }

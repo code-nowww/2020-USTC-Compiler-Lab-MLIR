@@ -20,7 +20,8 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/Sequence.h"
-
+#include <vector>
+using namespace std;
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
@@ -291,8 +292,10 @@ struct ConvValidOpLowering : public ConversionPattern {
         /// getAffineDimExpr:position:Position of this identifier in the argument list.
         inputExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()) + getAffineDimExpr(2, nestedBuilder.getContext()));
         inputExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()) + getAffineDimExpr(3, nestedBuilder.getContext()));
-        kernelExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
-        kernelExprs.push_back(getAffineDimExpr(3, nestedBuilder.getContext()));
+        kernelExprs.push_back(getAffineConstantExpr(kernelType.getShape().vec()[0] - 1, nestedBuilder.getContext()) -
+                              getAffineDimExpr(2, nestedBuilder.getContext()));
+        kernelExprs.push_back(getAffineConstantExpr(kernelType.getShape().vec()[1] - 1, nestedBuilder.getContext()) -
+                              getAffineDimExpr(3, nestedBuilder.getContext()));
         resultExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
         resultExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
         auto LoadedInput = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(4, 0, inputExprs, nestedBuilder.getContext()), ivs);
@@ -309,13 +312,14 @@ struct ConvValidOpLowering : public ConversionPattern {
   }
 };
 
+
 //===----------------------------------------------------------------------===//
-// ToyToAffine RewritePatterns: full mode Convolution operations
+// ToyToAffine RewritePatterns: valid mode Convolution operations
 //===----------------------------------------------------------------------===//
 
-struct ConvFullOpLowering : public ConversionPattern {
-  ConvFullOpLowering(MLIRContext *ctx)
-      : ConversionPattern(toy::ConvFullOp::getOperationName(), 1, ctx) {}
+struct FillFullOpLowering : public ConversionPattern {
+  FillFullOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::FillFullOp::getOperationName(), 1, ctx) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
@@ -326,47 +330,46 @@ struct ConvFullOpLowering : public ConversionPattern {
     auto kernelType = op->getOperand(1).getType().cast<TensorType>();
     auto resultType = (*op->result_type_begin()).cast<TensorType>();
 
-    // When lowering the constant operation, we allocate and assign the constant
-    // values to a corresponding memref allocation.
     auto memRefType = convertTensorToMemRef(resultType);
     auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
 
-    // Create a nest of affine loops, with one loop per dimension of the shape.
-    // The buildAffineLoopNest function takes a callback that is used to construct
-    // the body of the innermost loop given a builder, a location and a range of
-    // loop induction variables.
-    SmallVector<int64_t, 4> lowerBounds(4, /*Value=*/0);
-    SmallVector<int64_t, 4> upperBounds;
-    SmallVector<int64_t, 4> steps(4, /*Value=*/1);
-    upperBounds.push_back(resultType.getShape().front());
-    upperBounds.push_back(resultType.getShape().back());
-    upperBounds.push_back(kernelType.getShape().front());
-    upperBounds.push_back(kernelType.getShape().back());
-    
+    SmallVector<int64_t, 2> firstlowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 2> steps(2, /*Value=*/1);
+
     buildAffineLoopNest(
-      rewriter, loc, lowerBounds, upperBounds, steps,
+      rewriter, loc, firstlowerBounds, resultType.getShape(), steps,
       [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
 
-        toy::ConvFullOpAdaptor ConvFullAdaptor(operands);
-        Value target = ConvFullAdaptor.target();
-        Value kernel = ConvFullAdaptor.kernel();
-        
-        SmallVector<AffineExpr, 2> inputExprs, kernelExprs, resultExprs;
-        /// getAffineDimExpr:position:Position of this identifier in the argument list.
-        inputExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()) + getAffineDimExpr(2, nestedBuilder.getContext()));
-        inputExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()) + getAffineDimExpr(3, nestedBuilder.getContext()));
-        kernelExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
-        kernelExprs.push_back(getAffineDimExpr(3, nestedBuilder.getContext()));
-        resultExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
-        resultExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
-        auto LoadedInput = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(4, 0, inputExprs, nestedBuilder.getContext()), ivs);
-        auto LoadedKernel = nestedBuilder.create<AffineLoadOp>(loc, kernel, AffineMap::get(4, 0, kernelExprs, nestedBuilder.getContext()), ivs);
-        auto mulResult = nestedBuilder.create<MulFOp>(loc, LoadedInput, LoadedKernel);
-        auto LoadedResult = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(4, 0, resultExprs, nestedBuilder.getContext()), ivs);
-        auto addResult = nestedBuilder.create<AddFOp>(loc, mulResult, LoadedResult);
-        nestedBuilder.create<AffineStoreOp>(loc, addResult, alloc, AffineMap::get(4, 0, resultExprs, nestedBuilder.getContext()), ivs);
+        //toy::ConvValidOpAdaptor ConvValidAdaptor(operands);
+        //Value target = ConvValidAdaptor.target();
+        const APFloat zero(0.0);
+        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type()),alloc, ivs); 
       });
 
+    SmallVector<int64_t, 2> secondlowerBounds;
+    SmallVector<int64_t, 2> secondupperBounds;
+    secondlowerBounds.push_back(kernelType.getShape().vec()[0]-1);
+    secondlowerBounds.push_back(kernelType.getShape().vec()[1]-1);
+    secondupperBounds.push_back(kernelType.getShape().vec()[0] + targetType.getShape().vec()[0] - 1);
+    secondupperBounds.push_back(kernelType.getShape().vec()[1] + targetType.getShape().vec()[1] - 1);
+
+    buildAffineLoopNest(
+      rewriter, loc, secondlowerBounds, secondupperBounds, steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+        toy::FillFullOpAdaptor FillFullAdaptor(operands);
+        Value target = FillFullAdaptor.target();
+        
+        SmallVector<AffineExpr, 2> exprs;
+
+        exprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()) -
+                        getAffineConstantExpr(kernelType.getShape().vec()[0] - 1, nestedBuilder.getContext()));
+        exprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()) -
+                        getAffineConstantExpr(kernelType.getShape().vec()[1] - 1, nestedBuilder.getContext()));
+        
+        auto LoadedTarget = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, exprs, nestedBuilder.getContext()), ivs);
+        nestedBuilder.create<AffineStoreOp>(loc, LoadedTarget, alloc, ivs);
+      });
     // Replace this operation with the generated alloc.
     rewriter.replaceOp(op, alloc);
     return success();
@@ -374,12 +377,12 @@ struct ConvFullOpLowering : public ConversionPattern {
 };
 
 //===----------------------------------------------------------------------===//
-// ToyToAffine RewritePatterns: full mode Convolution operations
+// ToyToAffine RewritePatterns: valid mode Convolution operations
 //===----------------------------------------------------------------------===//
 
-struct ConvSomeOpLowering : public ConversionPattern {
-  ConvSomeOpLowering(MLIRContext *ctx)
-      : ConversionPattern(toy::ConvSomeOp::getOperationName(), 1, ctx) {}
+struct FillSomeOpLowering : public ConversionPattern {
+  FillSomeOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::FillSomeOp::getOperationName(), 1, ctx) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
@@ -390,52 +393,53 @@ struct ConvSomeOpLowering : public ConversionPattern {
     auto kernelType = op->getOperand(1).getType().cast<TensorType>();
     auto resultType = (*op->result_type_begin()).cast<TensorType>();
 
-    // When lowering the constant operation, we allocate and assign the constant
-    // values to a corresponding memref allocation.
     auto memRefType = convertTensorToMemRef(resultType);
     auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
 
-    // Create a nest of affine loops, with one loop per dimension of the shape.
-    // The buildAffineLoopNest function takes a callback that is used to construct
-    // the body of the innermost loop given a builder, a location and a range of
-    // loop induction variables.
-    SmallVector<int64_t, 4> lowerBounds(4, /*Value=*/0);
-    SmallVector<int64_t, 4> upperBounds;
-    SmallVector<int64_t, 4> steps(4, /*Value=*/1);
-    upperBounds.push_back(resultType.getShape().front());
-    upperBounds.push_back(resultType.getShape().back());
-    upperBounds.push_back(kernelType.getShape().front());
-    upperBounds.push_back(kernelType.getShape().back());
-    
+    SmallVector<int64_t, 2> firstlowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 2> steps(2, /*Value=*/1);
+
     buildAffineLoopNest(
-      rewriter, loc, lowerBounds, upperBounds, steps,
+      rewriter, loc, firstlowerBounds, resultType.getShape(), steps,
       [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
 
-        toy::ConvFullOpAdaptor ConvSomeAdaptor(operands);
-        Value target = ConvSomeAdaptor.target();
-        Value kernel = ConvSomeAdaptor.kernel();
-        
-        SmallVector<AffineExpr, 2> inputExprs, kernelExprs, resultExprs;
-        /// getAffineDimExpr:position:Position of this identifier in the argument list.
-        inputExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()) + getAffineDimExpr(2, nestedBuilder.getContext()));
-        inputExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()) + getAffineDimExpr(3, nestedBuilder.getContext()));
-        kernelExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
-        kernelExprs.push_back(getAffineDimExpr(3, nestedBuilder.getContext()));
-        resultExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
-        resultExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
-        auto LoadedInput = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(4, 0, inputExprs, nestedBuilder.getContext()), ivs);
-        auto LoadedKernel = nestedBuilder.create<AffineLoadOp>(loc, kernel, AffineMap::get(4, 0, kernelExprs, nestedBuilder.getContext()), ivs);
-        auto mulResult = nestedBuilder.create<MulFOp>(loc, LoadedInput, LoadedKernel);
-        auto LoadedResult = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(4, 0, resultExprs, nestedBuilder.getContext()), ivs);
-        auto addResult = nestedBuilder.create<AddFOp>(loc, mulResult, LoadedResult);
-        nestedBuilder.create<AffineStoreOp>(loc, addResult, alloc, AffineMap::get(4, 0, resultExprs, nestedBuilder.getContext()), ivs);
+        //toy::ConvValidOpAdaptor ConvValidAdaptor(operands);
+        //Value target = ConvValidAdaptor.target();
+        const APFloat zero(0.0);
+        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type()),alloc, ivs); 
       });
 
+    SmallVector<int64_t, 2> secondlowerBounds;
+    SmallVector<int64_t, 2> secondupperBounds;
+    secondlowerBounds.push_back((kernelType.getShape().vec()[0] - 1) / 2);
+    secondlowerBounds.push_back((kernelType.getShape().vec()[1] - 1) / 2);
+    secondupperBounds.push_back((kernelType.getShape().vec()[0] - 1) / 2 + targetType.getShape().vec()[0] );
+    secondupperBounds.push_back((kernelType.getShape().vec()[1] - 1) / 2 + targetType.getShape().vec()[1] );
+
+    buildAffineLoopNest(
+      rewriter, loc, secondlowerBounds, secondupperBounds, steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+        toy::FillFullOpAdaptor FillFullAdaptor(operands);
+        Value target = FillFullAdaptor.target();
+        
+        SmallVector<AffineExpr, 2> exprs;
+
+        exprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()) -
+                        getAffineConstantExpr((kernelType.getShape().vec()[0] - 1) / 2, nestedBuilder.getContext()));
+        exprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()) -
+                        getAffineConstantExpr((kernelType.getShape().vec()[1] - 1) / 2, nestedBuilder.getContext()));
+        
+        auto LoadedTarget = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, exprs, nestedBuilder.getContext()), ivs);
+        nestedBuilder.create<AffineStoreOp>(loc, LoadedTarget, alloc, ivs);
+      });
     // Replace this operation with the generated alloc.
     rewriter.replaceOp(op, alloc);
     return success();
   }
 };
+
+
 
 } // end anonymous namespace.
 
@@ -488,7 +492,7 @@ void ToyToAffineLoweringPass::runOnFunction() {
   OwningRewritePatternList patterns;
   patterns.insert<AddOpLowering, SubOpLowering, ConstantOpLowering, MulOpLowering,
                   ReturnOpLowering, TransposeOpLowering, ConvValidOpLowering, 
-                  ConvFullOpLowering, ConvSomeOpLowering>(&getContext());
+                  FillFullOpLowering, FillSomeOpLowering>(&getContext());
 
   // With the target and rewrite patterns defined, we can now attempt the
   // conversion. The conversion will signal failure if any of our `illegal`

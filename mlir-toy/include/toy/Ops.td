@@ -219,6 +219,60 @@ def ConvFullOp : Toy_Op<"conv_full",
   let verifier = [{ return ::verify(*this); }];
 }
 
+def FillFullOp : Toy_Op<"fill_full",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "full mode convolution operation";
+  let description = [{
+    The "conv_full" operation performs element-wise addition between two tensors.
+    The shapes of the tensor operands are not expected to match.
+  }];
+
+  let arguments = (ins F64Tensor:$target, F64Tensor:$kernel);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $target `:` type($target) `,` $kernel `:` type($kernel) `)` attr-dict `to` type(results)
+  }];
+
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseBinaryOp(parser, result); }];
+  let printer = [{ return ::printBinaryOp(p, *this); }];
+
+  // Allow building an ConvOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value target, Value kernel">
+  ];
+  // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def FillSomeOp : Toy_Op<"fill_some",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "full mode convolution operation";
+  let description = [{
+    The "conv_full" operation performs element-wise addition between two tensors.
+    The shapes of the tensor operands are not expected to match.
+  }];
+
+  let arguments = (ins F64Tensor:$target, F64Tensor:$kernel);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $target `:` type($target) `,` $kernel `:` type($kernel) `)` attr-dict `to` type(results)
+  }];
+
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseBinaryOp(parser, result); }];
+  let printer = [{ return ::printBinaryOp(p, *this); }];
+
+  // Allow building an ConvOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value target, Value kernel">
+  ];
+  // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
 def CastOp : Toy_Op<"cast",
     [DeclareOpInterfaceMethods<ShapeInferenceOpInterface>, NoSideEffect,
      SameOperandsAndResultShape]> {

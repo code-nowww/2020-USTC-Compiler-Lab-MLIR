@@ -59,6 +59,7 @@ enum Action {
   None,
   DumpAST,
   DumpMLIR,
+  DumpMLIRGPU,
   DumpMLIRAffine,
   DumpMLIRLLVM,
   DumpLLVMIR,
@@ -69,6 +70,8 @@ static cl::opt<enum Action> emitAction(
     "emit", cl::desc("Select the kind of output desired"),
     cl::values(clEnumValN(DumpAST, "ast", "output the AST dump")),
     cl::values(clEnumValN(DumpMLIR, "mlir", "output the MLIR dump")),
+    cl::values(clEnumValN(DumpMLIRGPU, "mlir-gpu",
+                          "output the MLIR dump after gpu lowering")),
     cl::values(clEnumValN(DumpMLIRAffine, "mlir-affine",
                           "output the MLIR dump after affine lowering")),
     cl::values(clEnumValN(DumpMLIRLLVM, "mlir-llvm",
@@ -136,6 +139,7 @@ int loadAndProcessMLIR(mlir::MLIRContext &context,
   // Check to see what granularity of MLIR we are compiling to.
   bool isLoweringToAffine = emitAction >= Action::DumpMLIRAffine;
   bool isLoweringToLLVM = emitAction >= Action::DumpMLIRLLVM;
+  bool isLoweringToGPU = emitAction == Action::DumpMLIRGPU;
 
   if (enableOpt || isLoweringToAffine) {
     // Inline all functions into main and then delete them.
@@ -148,6 +152,16 @@ int loadAndProcessMLIR(mlir::MLIRContext &context,
     optPM.addPass(mlir::toy::createShapeInferencePass());
     optPM.addPass(mlir::createCanonicalizerPass());
     optPM.addPass(mlir::createCSEPass());
+  }
+
+  if (isLoweringToGPU) {
+    // Finish lowering the toy IR to the LLVM dialect.
+    mlir::OpPassManager &optPM = pm.nest<mlir::FuncOp>();
+    optPM.addPass(mlir::createCanonicalizerPass());
+    optPM.addPass(mlir::toy::createShapeInferencePass());
+    optPM.addPass(mlir::createCanonicalizerPass());
+    optPM.addPass(mlir::createCSEPass());
+    pm.addPass(mlir::toy::createLowerToGPUPass());
   }
 
   if (isLoweringToAffine) {

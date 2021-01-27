@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This file implements a partial lowering of Toy operations to a combination of
-// affine loops and standard operations. This lowering expects that all calls
+// GPU and standard operations. This lowering expects that all calls
 // have been inlined, and all shapes have been resolved.
 //
 //===----------------------------------------------------------------------===//
@@ -26,7 +26,7 @@
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
-// ToyToAffine RewritePatterns
+// ToyToGPU RewritePatterns
 //===----------------------------------------------------------------------===//
 
 /// Convert the given TensorType into the corresponding MemRefType.
@@ -287,7 +287,7 @@ struct ConstantOpLowering : public OpRewritePattern<toy::ConstantOp> {
     // The last dimension is the base case of the recursion, at this point
     // we store the element at the given index.
     if (dimension == valueShape.size()) {
-    rewriter.create<mlir::AffineStoreOp>(
+    rewriter.create<mlir::StoreOp>(
       loc, rewriter.create<mlir::ConstantOp>(loc, *valueIt++), alloc,
       llvm::makeArrayRef(indices));
     return;
@@ -312,7 +312,7 @@ struct ConstantOpLowering : public OpRewritePattern<toy::ConstantOp> {
 };
 
 //===----------------------------------------------------------------------===//
-// ToyToAffine RewritePatterns: Return operations
+// ToyToGPU RewritePatterns: Return operations
 //===----------------------------------------------------------------------===//
 
 struct ReturnOpLowering : public OpRewritePattern<toy::ReturnOp> {
@@ -413,12 +413,9 @@ private:
 } // end anonymous namespace.
 
 //===----------------------------------------------------------------------===//
-// ToyToAffineLoweringPass
+// ToyToGPULoweringPass
 //===----------------------------------------------------------------------===//
 
-/// This is a partial lowering to affine loops of the toy operations that are
-/// computationally intensive (like matmul for example...) while keeping the
-/// rest of the code in the Toy dialect.
 namespace {
 struct ToyToGPULoweringPass
   : public PassWrapper<ToyToGPULoweringPass, FunctionPass> {

@@ -18,6 +18,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/Sequence.h"
@@ -34,18 +35,50 @@ static MemRefType convertTensorToMemRef(TensorType type) {
   return MemRefType::get(type.getShape(), type.getElementType());
 }
 
+/// to use `print_memref_f32`, we need to do registering with `mcuMemHostRegisterFloat`
+static FlatSymbolRefAttr 
+getOrInsertMcuMemHostRegisterFloat(PatternRewriter &rewriter,
+                                   ModuleOp module,
+                                   MemRefType type) {
+  auto *context = module.getContext();
+  if (module.lookupSymbol<mlir::FuncOp>("mcuMemHostRegisterFloat"))
+    return SymbolRefAttr::get("mcuMemHostRegisterFloat", context);
+    
+  // Insert the printf function into the body of the parent module.
+  PatternRewriter::InsertionGuard insertGuard(rewriter);
+  rewriter.setInsertionPointToStart(module.getBody());
+  
+  auto fnType = FunctionType::get({UnrankedMemRefType::get(type.getElementType(), 0)},
+                                  ArrayRef<Type>({}),
+                                  context);
+  rewriter.create<FuncOp>(module.getLoc(), "mcuMemHostRegisterFloat", fnType);
+  return SymbolRefAttr::get("mcuMemHostRegisterFloat", context);
+}
+
 /// Insert an allocation and deallocation for the given MemRefType.
 static Value insertAllocAndDealloc(MemRefType type, Location loc,
-                   PatternRewriter &rewriter) {
-  auto alloc = rewriter.create<AllocOp>(loc, type);
+                                   PatternRewriter &rewriter,
+                                   ModuleOp parentModule) {
+  auto alloc = rewriter.create<mlir::AllocOp>(loc, type);
+  
+  auto mcuMemHostRegisterFloatRef = 
+    getOrInsertMcuMemHostRegisterFloat(rewriter, parentModule, type);
+
+  auto unrankedMemRefType = UnrankedMemRefType::get(type.getElementType(), 0);
+  auto memrefCast = rewriter.create<mlir::MemRefCastOp>(loc, alloc, unrankedMemRefType);
+  auto registerCall = rewriter.create<mlir::CallOp>(loc, mcuMemHostRegisterFloatRef,
+                                                    ArrayRef<Type>({}),
+                                                    ArrayRef<Value>({memrefCast}));
 
   // Make sure to allocate at the beginning of the block.
   auto *parentBlock = alloc.getOperation()->getBlock();
+  registerCall.getOperation()->moveBefore(&parentBlock->front());
+  memrefCast.getOperation()->moveBefore(&parentBlock->front());
   alloc.getOperation()->moveBefore(&parentBlock->front());
 
   // Make sure to deallocate this alloc at the end of the block. This is fine
   // as toy functions have no control flow.
-  auto dealloc = rewriter.create<DeallocOp>(loc, alloc);
+  auto dealloc = rewriter.create<mlir::DeallocOp>(loc, alloc);
   dealloc.getOperation()->moveBefore(&parentBlock->back());
   return alloc;
 }
@@ -66,7 +99,7 @@ static void lowerOpToLoops(Operation *op, ValueRange operands,
 
   // Insert an allocation and deallocation for the result of this operation.
   auto memRefType = convertTensorToMemRef(tensorType);
-  auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+  auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter, op->getParentOfType<ModuleOp>());
 
   // Create a nest of affine loops, with one loop per dimension of the shape.
   // The buildAffineLoopNest function takes a callback that is used to construct
@@ -106,7 +139,7 @@ struct BinaryOpLowering : public ConversionPattern {
     // Insert an allocation and deallocation for the result of this operation.
     auto tensorType = (*op->result_type_begin()).cast<TensorType>();
     auto memRefType = convertTensorToMemRef(tensorType);
-    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter, op->getParentOfType<ModuleOp>());
 
     // get the shape to set gridSize and blockSize
     auto shape = tensorType.getShape().vec();
@@ -137,9 +170,9 @@ struct BinaryOpLowering : public ConversionPattern {
   }
 };
 
-using AddOpLowering = BinaryOpLowering<toy::AddOp, AddFOp>;
-using SubOpLowering = BinaryOpLowering<toy::SubOp, SubFOp>;
-using MulOpLowering = BinaryOpLowering<toy::MulOp, MulFOp>;
+using AddOpLowering = BinaryOpLowering<toy::AddOp, mlir::AddFOp>;
+using SubOpLowering = BinaryOpLowering<toy::SubOp, mlir::SubFOp>;
+using MulOpLowering = BinaryOpLowering<toy::MulOp, mlir::MulFOp>;
 
 
 //===----------------------------------------------------------------------===//
@@ -160,7 +193,7 @@ struct MatrixMulOpLowering : public ConversionPattern {
   
   // Insert an allocation and deallocation for the result of this operation.
   auto memRefType = convertTensorToMemRef(tensorType);
-  auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+  auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter, op->getParentOfType<ModuleOp>());
 
   SmallVector<int64_t, 4> LowerBounds(2, /*Value=*/0);
   SmallVector<int64_t, 4> Steps(2, /*Value=*/1);
@@ -169,7 +202,7 @@ struct MatrixMulOpLowering : public ConversionPattern {
     rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
     [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
       const APFloat zero(0.0);
-      nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF64Type()), alloc, ivs);
+      nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF32Type()), alloc, ivs);
     });
   
   SmallVector<int64_t, 4> loopShape;
@@ -197,11 +230,11 @@ struct MatrixMulOpLowering : public ConversionPattern {
       resultExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
       resultExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
 
-      auto LoadedLhs = nestedBuilder.create<AffineLoadOp>(loc, lhs, AffineMap::get(3, 0, lhsExprs, nestedBuilder.getContext()), ivs);
-      auto LoadedRhs = nestedBuilder.create<AffineLoadOp>(loc, rhs, AffineMap::get(3, 0, rhsExprs, nestedBuilder.getContext()), ivs);
-      auto mulResult = nestedBuilder.create<MulFOp>(loc, LoadedLhs, LoadedRhs);
-      auto LoadedResult = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(3, 0, resultExprs, nestedBuilder.getContext()), ivs);
-      auto addResult = nestedBuilder.create<AddFOp>(loc, mulResult, LoadedResult);
+      auto LoadedLhs = nestedBuilder.create<mlir::AffineLoadOp>(loc, lhs, AffineMap::get(3, 0, lhsExprs, nestedBuilder.getContext()), ivs);
+      auto LoadedRhs = nestedBuilder.create<mlir::AffineLoadOp>(loc, rhs, AffineMap::get(3, 0, rhsExprs, nestedBuilder.getContext()), ivs);
+      auto mulResult = nestedBuilder.create<mlir::MulFOp>(loc, LoadedLhs, LoadedRhs);
+      auto LoadedResult = nestedBuilder.create<mlir::AffineLoadOp>(loc, alloc, AffineMap::get(3, 0, resultExprs, nestedBuilder.getContext()), ivs);
+      auto addResult = nestedBuilder.create<mlir::AddFOp>(loc, mulResult, LoadedResult);
       nestedBuilder.create<AffineStoreOp>(loc, addResult, alloc, AffineMap::get(3, 0, resultExprs, nestedBuilder.getContext()), ivs);
     });
 
@@ -227,7 +260,7 @@ struct ConstantOpLowering : public OpRewritePattern<toy::ConstantOp> {
   // values to a corresponding memref allocation.
   auto tensorType = op.getType().cast<TensorType>();
   auto memRefType = convertTensorToMemRef(tensorType);
-  auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+  auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter, op.getParentOfType<ModuleOp>());
 
   // We will be generating constant indices up-to the largest dimension.
   // Create these constants up-front to avoid large amounts of redundant
@@ -254,8 +287,8 @@ struct ConstantOpLowering : public OpRewritePattern<toy::ConstantOp> {
     // The last dimension is the base case of the recursion, at this point
     // we store the element at the given index.
     if (dimension == valueShape.size()) {
-    rewriter.create<AffineStoreOp>(
-      loc, rewriter.create<ConstantOp>(loc, *valueIt++), alloc,
+    rewriter.create<mlir::AffineStoreOp>(
+      loc, rewriter.create<mlir::ConstantOp>(loc, *valueIt++), alloc,
       llvm::makeArrayRef(indices));
     return;
     }
@@ -293,7 +326,7 @@ struct ReturnOpLowering : public OpRewritePattern<toy::ReturnOp> {
     return failure();
 
   // We lower "toy.return" directly to "std.return".
-  rewriter.replaceOpWithNewOp<ReturnOp>(op);
+  rewriter.replaceOpWithNewOp<mlir::ReturnOp>(op);
   return success();
   }
 };
@@ -322,10 +355,58 @@ struct TransposeOpLowering : public ConversionPattern {
            // Transpose the elements by generating a load from the
            // reverse indices.
            SmallVector<Value, 2> reverseIvs(llvm::reverse(loopIvs));
-           return builder.create<AffineLoadOp>(loc, input,
+           return builder.create<mlir::AffineLoadOp>(loc, input,
                              reverseIvs);
            });
   return success();
+  }
+};
+
+
+//===----------------------------------------------------------------------===//
+// ToyToGPU RewritePatterns: print operations
+//===----------------------------------------------------------------------===//
+
+class PrintOpLowering : public ConversionPattern {
+public:
+  explicit PrintOpLowering(MLIRContext *context)
+      : ConversionPattern(toy::PrintOp::getOperationName(), 1, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {                 
+      auto loc = op->getLoc();
+
+      // // Insert an allocation and deallocation for the result of this operation.
+      auto unrankedMemRefType = UnrankedMemRefType::get(rewriter.getF32Type(), 0);
+      auto memrefCast =  rewriter.create<mlir::MemRefCastOp>(loc, operands[0], unrankedMemRefType);
+
+      // // get or insert Print
+      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+      auto printRef = getOrInsertPrint(rewriter, parentModule);
+      rewriter.create<mlir::CallOp>(loc, printRef, ArrayRef<Type>({}), ArrayRef<Value>({memrefCast}));
+      
+      rewriter.eraseOp(op);
+      return success();    
+  }
+
+private:
+  /// Return a symbol reference to the print_memref_f32 function, 
+  /// inserting it into the module if necessary.
+  static FlatSymbolRefAttr getOrInsertPrint(PatternRewriter &rewriter,
+                                            ModuleOp module) {
+    auto *context = module.getContext();
+    if (module.lookupSymbol<mlir::FuncOp>("print_memref_f32"))
+      return SymbolRefAttr::get("print_memref_f32", context);
+      
+    // Insert the printf function into the body of the parent module.
+    PatternRewriter::InsertionGuard insertGuard(rewriter);
+    rewriter.setInsertionPointToStart(module.getBody());
+    
+    auto fnType = FunctionType::get({UnrankedMemRefType::get(rewriter.getF32Type(), 0)},
+                                    ArrayRef<Type>({}), context);
+    rewriter.create<mlir::FuncOp>(module.getLoc(), "print_memref_f32", fnType);
+    return SymbolRefAttr::get("print_memref_f32", context);
   }
 };
 
@@ -366,20 +447,18 @@ void ToyToGPULoweringPass::runOnFunction() {
   // We define the specific operations, or dialects, that are legal targets for
   // this lowering. In our case, we are lowering to a combination of the
   // `Affine` and `Standard` dialects.
-  target.addLegalDialect<gpu::GPUDialect, AffineDialect, StandardOpsDialect>();
-
-  // We also define the Toy dialect as Illegal so that the conversion will fail
-  // if any of these operations are *not* converted. Given that we actually want
-  // a partial lowering, we explicitly mark the Toy operations that don't want
-  // to lower, `toy.print`, as `legal`.
+  target.addLegalDialect<gpu::GPUDialect, mlir::AffineDialect, mlir::StandardOpsDialect>();
+  target.addLegalOp<mlir::FuncOp>();
   target.addIllegalDialect<toy::ToyDialect>();
-  target.addLegalOp<toy::PrintOp>();
 
   // Now that the conversion target has been defined, we just need to provide
   // the set of patterns that will lower the Toy operations.
   OwningRewritePatternList patterns;
-  patterns.insert<AddOpLowering, SubOpLowering, ConstantOpLowering, MulOpLowering, MatrixMulOpLowering,
-          ReturnOpLowering, TransposeOpLowering>(&getContext());
+  patterns.insert<ConstantOpLowering, 
+                  AddOpLowering, SubOpLowering, MulOpLowering, MatrixMulOpLowering,
+                  TransposeOpLowering,
+                  PrintOpLowering,
+                  ReturnOpLowering>(&getContext());
 
   // With the target and rewrite patterns defined, we can now attempt the
   // conversion. The conversion will signal failure if any of our `illegal`

@@ -38,7 +38,7 @@ def Toy_StructType :
     Type<CPred<"$_self.isa<StructType>()">, "Toy struct type">;
 
 // Provide a definition of the types that are used within the Toy dialect.
-def Toy_Type : AnyTypeOf<[F64Tensor, Toy_StructType]>;
+def Toy_Type : AnyTypeOf<[F32Tensor, Toy_StructType]>;
 
 //===----------------------------------------------------------------------===//
 // Toy Operations
@@ -60,15 +60,15 @@ def ConstantOp : Toy_Op<"constant",
 
     ```mlir
       %0 = toy.constant dense<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]>
-                        : tensor<2x3xf64>
+                        : tensor<2x3xf32>
     ```
   }];
 
   // The constant operation takes an attribute as the only input.
-  let arguments = (ins F64ElementsAttr:$value);
+  let arguments = (ins FloatElementsAttr<32>:$value);
 
   // The constant operation returns a single value of TensorType.
-  let results = (outs F64Tensor);
+  let results = (outs F32Tensor);
 
   // Specify a parser and printer method.
   let parser = [{ return ::parseConstantOp(parser, result); }];
@@ -85,7 +85,7 @@ def ConstantOp : Toy_Op<"constant",
     }]>,
 
     // Build a constant with a given constant floating-point value.
-    OpBuilder<"OpBuilder &builder, OperationState &state, double value">
+    OpBuilder<"OpBuilder &builder, OperationState &state, float value">
   ];
 
   // Invoke a static verify method to verify this constant operation.
@@ -103,8 +103,8 @@ def AddOp : Toy_Op<"add",
     The shapes of the tensor operands are expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$lhs, F32Tensor:$rhs);
+  let results = (outs F32Tensor);
 
   // Specify a parser and printer method.
   let parser = [{ return ::parseBinaryOp(parser, result); }];
@@ -124,8 +124,8 @@ def MatrixMulOp : Toy_Op<"matrixmul",
     The shapes of the tensor operands are expected to match.
   }];
   
-  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$lhs, F32Tensor:$rhs);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $lhs `:` type($lhs) `,` $rhs `:` type($rhs) `)` attr-dict `to` type(results)
@@ -152,8 +152,8 @@ def SubOp : Toy_Op<"sub",
     The shapes of the tensor operands are expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$lhs, F32Tensor:$rhs);
+  let results = (outs F32Tensor);
 
   // Specify a parser and printer method.
   let parser = [{ return ::parseBinaryOp(parser, result); }];
@@ -177,8 +177,8 @@ def CastOp : Toy_Op<"cast",
     operation is invalid if converting to a mismatching constant dimension.
   }];
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor:$output);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor:$output);
 
   let assemblyFormat = "$input attr-dict `:` type($input) `to` type($output)";
 
@@ -197,7 +197,7 @@ def GenericCallOp : Toy_Op<"generic_call",
 
     ```mlir
      %4 = toy.generic_call @my_func(%1, %3)
-           : (tensor<2x3xf64>, tensor<2x3xf64>) -> tensor<*xf64>
+           : (tensor<2x3xf32>, tensor<2x3xf32>) -> tensor<*xf32>
     ```
 
     This is only valid if a function named "my_func" exists and takes two
@@ -232,8 +232,8 @@ def MulOp : Toy_Op<"mul",
     tensors. The shapes of the tensor operands are expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$lhs, F32Tensor:$rhs);
+  let results = (outs F32Tensor);
 
   // Specify a parser and printer method.
   let parser = [{ return ::parseBinaryOp(parser, result); }];
@@ -253,8 +253,8 @@ def PrintOp : Toy_Op<"print"> {
   }];
 
   // The print operation takes an input tensor to print.
-  // We also allow a F64MemRef to enable interop during partial lowering.
-  let arguments = (ins AnyTypeOf<[F64Tensor, F64MemRef]>:$input);
+  // We also allow a F32MemRef to enable interop during partial lowering.
+  let arguments = (ins AnyTypeOf<[F32Tensor, F32MemRef]>:$input);
 
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
@@ -266,11 +266,11 @@ def ReshapeOp : Toy_Op<"reshape", [NoSideEffect]> {
     the same number of elements but different shapes. For example:
 
     ```mlir
-       %0 = toy.reshape (%arg1 : tensor<10xf64>) to tensor<5x2xf64>
+       %0 = toy.reshape (%arg1 : tensor<10xf32>) to tensor<5x2xf32>
     ```
   }];
 
-  let arguments = (ins F64Tensor:$input);
+  let arguments = (ins F32Tensor:$input);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
@@ -280,7 +280,7 @@ def ReshapeOp : Toy_Op<"reshape", [NoSideEffect]> {
   let hasCanonicalizer = 1;
 
   // We expect that the reshape operation returns a statically shaped tensor.
-  let results = (outs StaticShapeTensorOf<[F64]>);
+  let results = (outs StaticShapeTensorOf<[F32]>);
 }
 
 def ReturnOp : Toy_Op<"return", [NoSideEffect, HasParent<"FuncOp">,
@@ -293,9 +293,9 @@ def ReturnOp : Toy_Op<"return", [NoSideEffect, HasParent<"FuncOp">,
     the operation. For example:
 
     ```mlir
-      func @foo() -> tensor<2xf64> {
+      func @foo() -> tensor<2xf32> {
         ...
-        toy.return %0 : tensor<2xf64>
+        toy.return %0 : tensor<2xf32>
       }
     ```
   }];
@@ -354,8 +354,8 @@ def StructConstantOp : Toy_Op<"struct_constant", [ConstantLike, NoSideEffect]> {
 
     ```mlir
       %0 = toy.struct_constant [
-        dense<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]> : tensor<2x3xf64>
-      ] : !toy.struct<tensor<*xf64>>
+        dense<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]> : tensor<2x3xf32>
+      ] : !toy.struct<tensor<*xf32>>
     ```
   }];
 
@@ -372,8 +372,8 @@ def TransposeOp : Toy_Op<"transpose",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "transpose operation";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)

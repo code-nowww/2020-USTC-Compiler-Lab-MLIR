@@ -202,79 +202,6 @@ struct MatrixMulOpLowering : public ConversionPattern {
 };
 
 //===----------------------------------------------------------------------===//
-// ToyToAffine RewritePatterns: Adjoint operations
-//===----------------------------------------------------------------------===//
-
-struct AdjointOpLowering : public ConversionPattern {
-  AdjointOpLowering(MLIRContext *ctx)
-      : ConversionPattern(toy::AdjointOp::getOperationName(), 1, ctx) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-    
-    // Modified from lowerOpToLoops
-    auto loc = op->getLoc();
-    auto tensorType = (*op->result_type_begin()).cast<TensorType>();
-    
-    // Insert an allocation and deallocation for the result of this operation.
-    auto memRefType = convertTensorToMemRef(tensorType);
-    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
-
-    SmallVector<int64_t, 4> LowerBounds(2, /*Value=*/0);
-    SmallVector<int64_t, 4> Steps(2, /*Value=*/1);
-    
-    buildAffineLoopNest(
-        rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
-        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
-          auto transpresult = nestedBuilder.create<TransposeOp>(loc, AdjointAdaptor.input());
-          const APFloat zero(0.0);
-          nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF64Type()), alloc, ivs);
-        });
-
-    // Replace this operation with the generated alloc.
-    rewriter.replaceOp(op, alloc);
-    return success();
-  }
-};
-
-//===----------------------------------------------------------------------===//
-// ToyToAffine RewritePatterns: Inverse operations
-//===----------------------------------------------------------------------===//
-
-struct InverseOpLowering : public ConversionPattern {
-  InverseOpLowering(MLIRContext *ctx)
-      : ConversionPattern(toy::InverseOp::getOperationName(), 1, ctx) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-    
-    // Modified from lowerOpToLoops
-    auto loc = op->getLoc();
-    auto tensorType = (*op->result_type_begin()).cast<TensorType>();
-    
-    // Insert an allocation and deallocation for the result of this operation.
-    auto memRefType = convertTensorToMemRef(tensorType);
-    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
-
-    SmallVector<int64_t, 4> LowerBounds(2, /*Value=*/0);
-    SmallVector<int64_t, 4> Steps(2, /*Value=*/1);
-    
-    buildAffineLoopNest(
-        rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
-        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
-          const APFloat zero(0.0);
-          nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF64Type()), alloc, ivs);
-        });
-    
-    // Replace this operation with the generated alloc.
-    rewriter.replaceOp(op, alloc);
-    return success();
-  }
-};
-
-//===----------------------------------------------------------------------===//
 // ToyToAffine RewritePatterns: Constant operations
 //===----------------------------------------------------------------------===//
 
@@ -388,6 +315,79 @@ struct TransposeOpLowering : public ConversionPattern {
                      return builder.create<AffineLoadOp>(loc, input,
                                                          reverseIvs);
                    });
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// ToyToAffine RewritePatterns: Adjoint operations
+//===----------------------------------------------------------------------===//
+
+struct AdjointOpLowering : public ConversionPattern {
+  AdjointOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::AdjointOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    
+    // Modified from lowerOpToLoops
+    auto loc = op->getLoc();
+    auto tensorType = (*op->result_type_begin()).cast<TensorType>();
+    
+    // Insert an allocation and deallocation for the result of this operation.
+    auto memRefType = convertTensorToMemRef(tensorType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    SmallVector<int64_t, 4> LowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 4> Steps(2, /*Value=*/1);
+    
+    buildAffineLoopNest(
+        rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
+        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+          auto transpresult = nestedBuilder.create<TransposeOp>(loc, AdjointOpAdaptor.input());
+          const APFloat zero(0.0);
+          nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF64Type()), alloc, ivs);
+        });
+
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// ToyToAffine RewritePatterns: Inverse operations
+//===----------------------------------------------------------------------===//
+
+struct InverseOpLowering : public ConversionPattern {
+  InverseOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::InverseOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    
+    // Modified from lowerOpToLoops
+    auto loc = op->getLoc();
+    auto tensorType = (*op->result_type_begin()).cast<TensorType>();
+    
+    // Insert an allocation and deallocation for the result of this operation.
+    auto memRefType = convertTensorToMemRef(tensorType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    SmallVector<int64_t, 4> LowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 4> Steps(2, /*Value=*/1);
+    
+    buildAffineLoopNest(
+        rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
+        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+          const APFloat zero(0.0);
+          nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF64Type()), alloc, ivs);
+        });
+    
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
     return success();
   }
 };

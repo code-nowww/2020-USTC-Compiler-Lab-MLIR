@@ -727,7 +727,7 @@ static mlir::LogicalResult verify(MatrixMulOp op) {
   }
   return mlir::success();
 }
-
+/*
 // InverseOp
 
 void InverseOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
@@ -808,7 +808,7 @@ static mlir::LogicalResult verify(AdjointOp op) {
   }
   return mlir::success();
 }
-
+*/
 //===----------------------------------------------------------------------===//
 // CastOp
 

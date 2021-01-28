@@ -318,7 +318,7 @@ struct TransposeOpLowering : public ConversionPattern {
     return success();
   }
 };
-
+/*
 //===----------------------------------------------------------------------===//
 // ToyToAffine RewritePatterns: Adjoint operations
 //===----------------------------------------------------------------------===//
@@ -382,7 +382,7 @@ struct InverseOpLowering : public ConversionPattern {
     return success();
   }
 };
-
+*/
 //===----------------------------------------------------------------------===//
 // ToyToAffine RewritePatterns: valid mode Convolution operations
 //===----------------------------------------------------------------------===//

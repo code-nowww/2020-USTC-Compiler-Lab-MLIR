@@ -624,7 +624,7 @@ def TransposeOp : Toy_Op<"transpose",
   // Invoke a static verify method to verify this transpose operation.
   let verifier = [{ return ::verify(*this); }];
 }
-
+/*
 def InverseOp : Toy_Op<"inverse",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "inverse operation";
@@ -670,5 +670,6 @@ def AdjointOp : Toy_Op<"adjoint",
   // Invoke a static verify method to verify this AdjointOp operation.
   let verifier = [{ return ::verify(*this); }];
 }
+*/
 
 #endif // TOY_OPS

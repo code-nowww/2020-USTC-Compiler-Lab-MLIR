@@ -936,7 +936,7 @@ void ToyToAffineLoweringPass::runOnFunction() {
                   ReturnOpLowering, TransposeOpLowering, ConvValidOpLowering, 
                   FillFullOpLowering, FillSomeOpLowering, MatrixMulOpLowering,
                   LUOpLowering, LUplusOpLowering, CmpOpLowering, DetOpLowering,
-                  DivOpLowering, AdjointOpLowering, InverseOpLowering>(&getContext());
+                  DivOpLowering>(&getContext());
 
   // With the target and rewrite patterns defined, we can now attempt the
   // conversion. The conversion will signal failure if any of our `illegal`

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+clang -emit-llvm -S ../tests/simple.cpp -o simple.ll
+opt -dot-cfg simple.ll
+opt -dot-dom simple.ll
+
+dot .main.dot -Tpng -o cfg.png
+dot dom.main.dot -Tpng -o dom.png

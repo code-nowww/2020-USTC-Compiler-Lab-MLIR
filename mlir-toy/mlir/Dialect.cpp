@@ -284,6 +284,19 @@ void SubOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 void SubOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 
 //===----------------------------------------------------------------------===//
+// SubOp
+
+void CmpOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value lhs, mlir::Value rhs) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({lhs, rhs});
+}
+
+/// Infer the output shape of the SubOp, this is required by the shape inference
+/// interface.
+void CmpOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
+
+//===----------------------------------------------------------------------===//
 // ConvValidOp
 
 void ConvValidOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
@@ -457,17 +470,15 @@ void FillSomeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
   state.addOperands({target, kernel});
 }
 
-/// Infer the output shape of the ConvOp, this is required by the shape inference
-/// interface.
 void FillSomeOp::inferShapes() { 
-  //getResult().setType(getOperand(0).getType()); 
+  
   auto targetTy = getOperand(0).getType().cast<RankedTensorType>();
   auto kernelTy = getOperand(1).getType().cast<RankedTensorType>();
+
   SmallVector<int64_t, 2> dims;
   dims.push_back(targetTy.getShape().vec()[0] + kernelTy.getShape().vec()[0] - 1);
   dims.push_back(targetTy.getShape().vec()[1] + kernelTy.getShape().vec()[1] - 1);
-  //TODO:how to extend???
-  //SmallVector<int64_t, 2> dims(llvm::reverse(targetTy.getShape()));
+
   getResult().setType(RankedTensorType::get(dims, targetTy.getElementType()));
 
 }
@@ -506,6 +517,84 @@ static mlir::LogicalResult verify(FillSomeOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// LUOp
+//===----------------------------------------------------------------------===//
+
+void LUOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value input) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({input});
+}
+
+
+void LUOp::inferShapes() { 
+  auto inputTy = getOperand().getType().cast<RankedTensorType>();
+
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(inputTy.getShape().vec()[0] * 2 + 1);
+  dims.push_back(inputTy.getShape().vec()[1]);
+
+  getResult().setType(RankedTensorType::get(dims, inputTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(LUOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto inputShape = inputType.getShape().vec();
+  auto resultShape = resultType.getShape().vec();
+  if (inputType.getShape().vec()[0] != inputType.getShape().vec()[1]) {
+    return op.emitError()
+           << "error in the LU OP's operands type, expect a square";
+  }
+  if (inputType.getElementType() != resultType.getElementType()) {
+    return op.emitError()
+           << "error in the LU OP's operands type, should have same type";
+  }
+  return mlir::success();
+}
+
+//===----------------------------------------------------------------------===//
+// LUplusOp
+//===----------------------------------------------------------------------===//
+
+void LUplusOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value input) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({input});
+}
+
+
+void LUplusOp::inferShapes() { 
+  auto inputTy = getOperand().getType().cast<RankedTensorType>();
+
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(inputTy.getShape().vec()[0] - 1);
+  dims.push_back(inputTy.getShape().vec()[1]);
+
+  getResult().setType(RankedTensorType::get(dims, inputTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(LUplusOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto inputShape = inputType.getShape().vec();
+  auto resultShape = resultType.getShape().vec();
+  
+  if (inputType.getElementType() != resultType.getElementType()) {
+    return op.emitError()
+           << "error in the LU OP's operands type, should have same type";
+  }
+  return mlir::success();
+}
+
+
+//===----------------------------------------------------------------------===//
 // ConvSomeOp
 
 void ConvSomeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
@@ -539,29 +628,14 @@ static mlir::LogicalResult verify(ConvSomeOp op) {
   auto inputShape = targetType.getShape().vec();
   auto kernelShape = kernelType.getShape().vec();
   auto resultShape = resultType.getShape().vec();
-  if (kernelShape[0]!= kernelShape[1]) {
-    return op.emitError()
-           << "error in the Conv2d OP's: same mode width not equal to height";
-  }
-  if (resultShape[0]!= inputShape[0] + kernelShape[0] - 1) {
-    return op.emitError()
-           << "error in the Conv2d OP's result shape[0]";
-  }
-  if (resultShape[1]!= inputShape[1] + kernelShape[1] - 1) {
-    return op.emitError()
-           << "error in the Conv2d OP's result shape[1]";
-  }
-  if (resultShape[0] < 0) {
-    return op.emitError()
-           << "Convolution kernel size should be smaller than the input size";
-  }
-  if (resultShape[1] < 0) {
-    return op.emitError()
-           << "Convolution kernel size should be smaller than the input size";
-  }
+  
   if (targetType.getElementType() != kernelType.getElementType()) {
     return op.emitError()
            << "error in the Conv2d OP's operands type, should have same type";
+  }
+}
+
+
 // MatrixMulOp
 
 void MatrixMulOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,

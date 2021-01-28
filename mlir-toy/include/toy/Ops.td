@@ -116,6 +116,27 @@ def AddOp : Toy_Op<"add",
   ];
 }
 
+def CmpOp : Toy_Op<"cmp",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "element-wise addition operation";
+  let description = [{
+    The "add" operation performs element-wise addition between two tensors.
+    The shapes of the tensor operands are expected to match.
+  }];
+
+  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
+  let results = (outs F64Tensor);
+
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseBinaryOp(parser, result); }];
+  let printer = [{ return ::printBinaryOp(p, *this); }];
+
+  // Allow building an AddOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value lhs, Value rhs">
+  ];
+}
+
 def MatrixMulOp : Toy_Op<"matrixmul",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "element-wise matrix multiplication operation";
@@ -296,6 +317,63 @@ def FillSomeOp : Toy_Op<"fill_some",
   // Allow building an ConvOp with from the two input operands.
   let builders = [
     OpBuilder<"OpBuilder &b, OperationState &state, Value target, Value kernel">
+  ];
+  // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def LUOp : Toy_Op<"lu",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "LU decomposition";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Allow building an ConvOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+  // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def LUplusOp : Toy_Op<"luplus",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "LU decomposition";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Allow building an ConvOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+  // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def DetOp : Toy_Op<"det",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "LU decomposition";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Allow building an ConvOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
   ];
   // Invoke a static verify method to verify this transpose operation.
   let verifier = [{ return ::verify(*this); }];

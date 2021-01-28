@@ -337,6 +337,8 @@ private:
       return builder.create<SubOp>(location, lhs, rhs);
     case '*':
       return builder.create<MulOp>(location, lhs, rhs);
+    case '>':
+      return builder.create<CmpOp>(location, lhs, rhs);
     }
 
     emitError(location, "invalid binary operator '") << binop.getOp() << "'";
@@ -522,6 +524,15 @@ private:
       return builder.create<MatrixMulOp>(location, operands[0],operands[1]);
     }
 
+    if (callee == "cmp") {
+      if (call.getArgs().size() != 2) {
+        emitError(location, "MLIR codegen encountered an error: toy.matrixmul "
+                            "accepts wrong number of arguments");
+        return nullptr;
+      }
+      return builder.create<CmpOp>(location, operands[0],operands[1]);
+    }
+
     if (callee == "conv_val") {
       if (call.getArgs().size() != 2) {
         emitError(location, "MLIR codegen encountered an error: toy.conv "
@@ -567,6 +578,16 @@ private:
         return nullptr;
       }
       return builder.create<FillSomeOp>(location, operands[0], operands[1]);
+    }
+
+    if (callee == "lu") {
+      if (call.getArgs().size() != 1) {
+        emitError(location, "MLIR codegen encountered an error: toy.conv "
+                            "only accept two arguments");
+        return nullptr;
+      }
+      auto luplus =  builder.create<LUOp>(location, operands[0]);
+      return builder.create<LUplusOp>(location, luplus);
     }
 
     // Otherwise this is a call to a user-defined function. Calls to

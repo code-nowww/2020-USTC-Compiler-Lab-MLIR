@@ -20,9 +20,11 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/Sequence.h"
+#include "llvm/IR/Constants.h"
 #include <vector>
 using namespace std;
 using namespace mlir;
+
 
 //===----------------------------------------------------------------------===//
 // ToyToAffine RewritePatterns
@@ -127,7 +129,7 @@ struct BinaryOpLowering : public ConversionPattern {
 using AddOpLowering = BinaryOpLowering<toy::AddOp, AddFOp>;
 using SubOpLowering = BinaryOpLowering<toy::SubOp, SubFOp>;
 using MulOpLowering = BinaryOpLowering<toy::MulOp, MulFOp>;
-
+using CmpOpLowering = BinaryOpLowering<toy::CmpOp, AddFOp>;
 //===----------------------------------------------------------------------===//
 // ToyToAffine RewritePatterns: MatrixMul operations
 //===----------------------------------------------------------------------===//
@@ -508,7 +510,252 @@ struct FillSomeOpLowering : public ConversionPattern {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// ToyToAffine RewritePatterns: LU decomposition operations
+//===----------------------------------------------------------------------===//
 
+struct LUOpLowering : public ConversionPattern {
+  LUOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::LUOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+   
+    auto loc = op->getLoc();
+    auto targetType = op->getOperand(0).getType().cast<TensorType>();
+    auto resultType = (*op->result_type_begin()).cast<TensorType>();
+    int64_t looplen = targetType.getShape().vec()[0];
+    auto memRefType = convertTensorToMemRef(resultType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    SmallVector<int64_t, 2> firstlowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 2> steps(2, /*Value=*/1);
+
+    buildAffineLoopNest(
+      rewriter, loc, firstlowerBounds, resultType.getShape(), steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+        const APFloat zero(0.0);
+        const APFloat One(1.0);
+        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type()),alloc, ivs); 
+      });
+
+    SmallVector<int64_t, 2> secondlowerBounds;
+    SmallVector<int64_t, 2> secondupperBounds;
+    secondlowerBounds.push_back(0);
+    secondlowerBounds.push_back(0);
+    secondupperBounds.push_back(looplen);
+    secondupperBounds.push_back(1);
+
+    int64_t manualIter = 0;
+    buildAffineLoopNest(
+      rewriter, loc, secondlowerBounds, secondupperBounds, steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+        const APFloat One(1.0);
+        SmallVector<AffineExpr, 2> exprs;
+        exprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+        exprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+
+        auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF64Type());
+        nestedBuilder.create<AffineStoreOp>(loc, oneexpr, alloc, AffineMap::get(2, 0, exprs, nestedBuilder.getContext()), ivs);
+        
+      });
+    
+    SmallVector<int64_t, 2> thirdlowerBounds(2, 0);
+    SmallVector<int64_t, 2> thirdupperBounds;
+    SmallVector<int64_t, 2> thirdsteps(2, 1);
+    thirdupperBounds.push_back(1);
+    thirdupperBounds.push_back(looplen);
+    buildAffineLoopNest(
+      rewriter, loc, thirdlowerBounds, thirdupperBounds, thirdsteps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+        SmallVector<AffineExpr, 2> zeroexprs, Uexprs, Lexprs;
+        toy::LUOpAdaptor LUAdaptor(operands);
+        Value target = LUAdaptor.input();
+
+        zeroexprs.push_back(getAffineConstantExpr(0, nestedBuilder.getContext()));
+        zeroexprs.push_back(getAffineConstantExpr(0, nestedBuilder.getContext()));
+        Uexprs.push_back(getAffineConstantExpr(looplen, nestedBuilder.getContext()));
+        Uexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+        Lexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+        Lexprs.push_back(getAffineConstantExpr(0, nestedBuilder.getContext()));
+
+        auto uzero = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, zeroexprs, nestedBuilder.getContext()), ivs);
+        auto LoadedTarget = nestedBuilder.create<AffineLoadOp>(loc, target, ivs);
+        nestedBuilder.create<AffineStoreOp>(loc, LoadedTarget, alloc, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
+        auto Lloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, Lexprs, nestedBuilder.getContext()), ivs);
+        auto Ldiv = nestedBuilder.create<DivFOp>(loc, Lloaded, uzero);
+        nestedBuilder.create<AffineStoreOp>(loc, Ldiv, alloc, AffineMap::get(2, 0, Lexprs, nestedBuilder.getContext()), ivs);
+    });
+
+    for(int i = 1;i < looplen; i++){
+        SmallVector<int64_t, 2> fourthlowerBounds;
+        SmallVector<int64_t, 2> fourthupperBounds;
+        SmallVector<int64_t, 2> fourthsteps(2, 1);
+        fourthlowerBounds.push_back(i);
+        fourthlowerBounds.push_back(0);
+        fourthupperBounds.push_back(looplen);
+        fourthupperBounds.push_back(i);
+        buildAffineLoopNest(
+          rewriter, loc, fourthlowerBounds, fourthupperBounds, fourthsteps,
+          [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+        
+            SmallVector<AffineExpr, 2> tempexprs, Uexprs, Lexprs;
+            toy::LUOpAdaptor LUAdaptor(operands);
+            Value target = LUAdaptor.input();
+
+            tempexprs.push_back(getAffineConstantExpr(2*looplen, nestedBuilder.getContext()));
+            tempexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+            Uexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()) +
+                             getAffineConstantExpr(looplen, nestedBuilder.getContext()));
+            Uexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+            Lexprs.push_back(getAffineConstantExpr(i, nestedBuilder.getContext()));
+            Lexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+
+            auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
+            auto Lloaded = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, Lexprs, nestedBuilder.getContext()), ivs);
+            auto muled = nestedBuilder.create<MulFOp>(loc, Uloaded, Lloaded);
+            auto temp = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
+            auto tempadded = nestedBuilder.create<AddFOp>(loc, muled, temp);
+            nestedBuilder.create<AffineStoreOp>(loc, tempadded, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
+        });
+        
+        // j iter
+        SmallVector<int64_t, 2> fifthlowerBounds;
+        SmallVector<int64_t, 2> fifthupperBounds;
+        SmallVector<int64_t, 2> fifthsteps(2, 1);
+        fifthlowerBounds.push_back(i);
+        fifthlowerBounds.push_back(i);
+        fifthupperBounds.push_back(i+1);
+        fifthupperBounds.push_back(looplen);
+        buildAffineLoopNest(
+          rewriter, loc, fifthlowerBounds, fifthupperBounds, fifthsteps,
+          [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+            SmallVector<AffineExpr, 2> tempexprs, Uexprs, Aexprs;
+            toy::LUOpAdaptor LUAdaptor(operands);
+            Value target = LUAdaptor.input();
+
+            Uexprs.push_back(getAffineConstantExpr(looplen + i, nestedBuilder.getContext()));
+            Uexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+            Aexprs.push_back(getAffineConstantExpr(i, nestedBuilder.getContext()));
+            Aexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+            tempexprs.push_back(getAffineConstantExpr(2*looplen, nestedBuilder.getContext()));
+            tempexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+
+            auto Aloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, Aexprs, nestedBuilder.getContext()), ivs);
+            auto temp = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
+            auto subed = nestedBuilder.create<SubFOp>(loc, Aloaded, temp);
+            nestedBuilder.create<AffineStoreOp>(loc, subed, alloc, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
+            const APFloat zero(0.0);
+            auto Zero = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type());
+            nestedBuilder.create<AffineStoreOp>(loc, Zero, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs); 
+        });
+        
+        SmallVector<int64_t, 2> sixthlowerBounds;
+        SmallVector<int64_t, 2> sixthupperBounds;
+        SmallVector<int64_t, 2> sixthsteps(2, 1);
+        sixthlowerBounds.push_back(i + 1);
+        sixthlowerBounds.push_back(0);
+        sixthupperBounds.push_back(looplen);
+        sixthupperBounds.push_back(i);
+        buildAffineLoopNest(
+          rewriter, loc, sixthlowerBounds, sixthupperBounds, sixthsteps,
+          [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+        
+            SmallVector<AffineExpr, 2> tempexprs, Uexprs, Lexprs;
+            toy::LUOpAdaptor LUAdaptor(operands);
+            Value target = LUAdaptor.input();
+
+            tempexprs.push_back(getAffineConstantExpr(2*looplen, nestedBuilder.getContext()));
+            tempexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+            Uexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()) +
+                             getAffineConstantExpr(looplen, nestedBuilder.getContext()));
+            Uexprs.push_back(getAffineConstantExpr(i, nestedBuilder.getContext()));
+            Lexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+            Lexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+
+            auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
+            auto Lloaded = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, Lexprs, nestedBuilder.getContext()), ivs);
+            auto muled = nestedBuilder.create<MulFOp>(loc, Uloaded, Lloaded);
+            auto temp = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
+            auto tempadded = nestedBuilder.create<AddFOp>(loc, muled, temp);
+            nestedBuilder.create<AffineStoreOp>(loc, tempadded, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
+        });
+
+        // j iter
+        SmallVector<int64_t, 2> seventhlowerBounds;
+        SmallVector<int64_t, 2> seventhupperBounds;
+        SmallVector<int64_t, 2> seventhsteps(2, 1);
+        seventhlowerBounds.push_back(i);
+        seventhlowerBounds.push_back(i+1);
+        seventhupperBounds.push_back(i+1);
+        seventhupperBounds.push_back(looplen);
+        buildAffineLoopNest(
+          rewriter, loc, seventhlowerBounds, seventhupperBounds, seventhsteps,
+          [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+            SmallVector<AffineExpr, 2> tempexprs, Uexprs, Aexprs;
+            toy::LUOpAdaptor LUAdaptor(operands);
+            Value target = LUAdaptor.input();
+
+            Uexprs.push_back(getAffineConstantExpr(looplen + i, nestedBuilder.getContext()));
+            Uexprs.push_back(getAffineConstantExpr(i, nestedBuilder.getContext()));
+            Aexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+            Aexprs.push_back(getAffineConstantExpr(i, nestedBuilder.getContext())); 
+            tempexprs.push_back(getAffineConstantExpr(2*looplen, nestedBuilder.getContext()));
+            tempexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+
+            auto Aloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, Aexprs, nestedBuilder.getContext()), ivs);
+            auto temp = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
+            auto subed = nestedBuilder.create<SubFOp>(loc, Aloaded, temp);
+            auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
+            auto dived = nestedBuilder.create<DivFOp>(loc, subed, Uloaded);
+            nestedBuilder.create<AffineStoreOp>(loc, dived, alloc, AffineMap::get(2, 0, Aexprs, nestedBuilder.getContext()), ivs);
+            const APFloat zero(0.0);
+            auto Zero = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type());
+            nestedBuilder.create<AffineStoreOp>(loc, Zero, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs); 
+        });
+    }//end of for
+    
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
+
+
+struct LUplusOpLowering : public ConversionPattern {
+  LUplusOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::LUplusOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+   
+    auto loc = op->getLoc();
+    auto resultType = (*op->result_type_begin()).cast<TensorType>();
+    auto memRefType = convertTensorToMemRef(resultType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    SmallVector<int64_t, 2> firstlowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 2> steps(2, /*Value=*/1);
+
+    buildAffineLoopNest(
+      rewriter, loc, firstlowerBounds, resultType.getShape(), steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+        toy::LUplusOpAdaptor LUplusAdaptor(operands);
+        Value target = LUplusAdaptor.input();
+        auto Aloaded = nestedBuilder.create<AffineLoadOp>(loc, target, ivs);
+        nestedBuilder.create<AffineStoreOp>(loc, Aloaded, alloc, ivs); 
+      });
+
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
 
 } // end anonymous namespace.
 
@@ -561,7 +808,8 @@ void ToyToAffineLoweringPass::runOnFunction() {
   OwningRewritePatternList patterns;
   patterns.insert<AddOpLowering, SubOpLowering, ConstantOpLowering, MulOpLowering,
                   ReturnOpLowering, TransposeOpLowering, ConvValidOpLowering, 
-                  FillFullOpLowering, FillSomeOpLowering, MatrixMulOpLowering>(&getContext());
+                  FillFullOpLowering, FillSomeOpLowering, MatrixMulOpLowering,
+                  LUOpLowering, LUplusOpLowering, CmpOpLowering>(&getContext());
 
   // With the target and rewrite patterns defined, we can now attempt the
   // conversion. The conversion will signal failure if any of our `illegal`

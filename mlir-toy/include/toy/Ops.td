@@ -547,4 +547,50 @@ def TransposeOp : Toy_Op<"transpose",
   let verifier = [{ return ::verify(*this); }];
 }
 
+def InverseOp : Toy_Op<"inverse",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "inverse operation";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Enable registering canonicalization patterns with this operation.
+  let hasCanonicalizer = 1;
+
+  // Allow building a InverseOp with from the input operand.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+
+  // Invoke a static verify method to verify this InverseOp operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def AdjointOp : Toy_Op<"adjoint",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "adjoint operation";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Enable registering canonicalization patterns with this operation.
+  let hasCanonicalizer = 1;
+
+  // Allow building a AdjointOp with from the input operand.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+
+  // Invoke a static verify method to verify this AdjointOp operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
 #endif // TOY_OPS

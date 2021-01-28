@@ -365,11 +365,6 @@ struct TransposeOpLowering : public ConversionPattern {
     typename toy::TransposeOp::Adaptor transposeAdaptor(operands);
     SmallVector<Value, 2> indices({launchOp.getThreadIds().x, launchOp.getBlockIds().x});
     SmallVector<Value, 2> transIndices({launchOp.getBlockIds().x, launchOp.getThreadIds().x});
-    // SmallVector<Value, 2> indices, transIndices;
-    // indices.push_back(launchOp.getBlockIds().x);
-    // indices.push_back(launchOp.getThreadIds().x);
-    // transIndices.push_back(launchOp.getThreadIds().x);
-    // transIndices.push_back(launchOp.getBlockIds().x);
 
 
     auto load = rewriter.create<mlir::LoadOp>(loc, transposeAdaptor.input(), indices);

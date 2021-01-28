@@ -345,7 +345,7 @@ struct AdjointOpLowering : public ConversionPattern {
     buildAffineLoopNest(
         rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
         [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
-          auto transpresult = nestedBuilder.create<TransposeOp>(loc, AdjointOpAdaptor.input());
+          //auto transpresult = nestedBuilder.create<TransposeOp>(loc, AdjointOpAdaptor.input());
           const APFloat zero(0.0);
           nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF64Type()), alloc, ivs);
         });

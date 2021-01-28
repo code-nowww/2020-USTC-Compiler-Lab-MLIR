@@ -287,10 +287,11 @@ void SubOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 // SubOp
 
 void CmpOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                  mlir::Value lhs, mlir::Value rhs) {
+            mlir::Value lhs, mlir::Value rhs) {
   state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
   state.addOperands({lhs, rhs});
 }
+
 
 /// Infer the output shape of the SubOp, this is required by the shape inference
 /// interface.
@@ -627,6 +628,117 @@ void DetOp::inferShapes() {
 }
 
 static mlir::LogicalResult verify(DetOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto inputShape = inputType.getShape().vec();
+  auto resultShape = resultType.getShape().vec();
+  
+  if (inputType.getElementType() != resultType.getElementType()) {
+    return op.emitError()
+           << "error in the LU OP's operands type, should have same type";
+  }
+  return mlir::success();
+}
+
+//===----------------------------------------------------------------------===//
+// ReverseOp
+//===----------------------------------------------------------------------===//
+
+void ReverseOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value input) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({input});
+}
+
+
+void ReverseOp::inferShapes() { 
+  auto inputTy = getOperand().getType().cast<RankedTensorType>();
+
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(inputTy.getShape().vec()[1] + 1);
+  dims.push_back(inputTy.getShape().vec()[1]);
+
+  getResult().setType(RankedTensorType::get(dims, inputTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(ReverseOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto inputShape = inputType.getShape().vec();
+  auto resultShape = resultType.getShape().vec();
+  
+  if (inputType.getElementType() != resultType.getElementType()) {
+    return op.emitError()
+           << "error in the LU OP's operands type, should have same type";
+  }
+  return mlir::success();
+}
+
+//===----------------------------------------------------------------------===//
+// ReverserOp
+//===----------------------------------------------------------------------===//
+
+void ReverserOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value input) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({input});
+}
+
+
+void ReverserOp::inferShapes() { 
+  auto inputTy = getOperand().getType().cast<RankedTensorType>();
+
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(inputTy.getShape().vec()[1]);
+  dims.push_back(inputTy.getShape().vec()[1]);
+
+  getResult().setType(RankedTensorType::get(dims, inputTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(ReverserOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto inputShape = inputType.getShape().vec();
+  auto resultShape = resultType.getShape().vec();
+  
+  if (inputType.getElementType() != resultType.getElementType()) {
+    return op.emitError()
+           << "error in the LU OP's operands type, should have same type";
+  }
+  return mlir::success();
+}
+
+//===----------------------------------------------------------------------===//
+// ReverseuOp
+//===----------------------------------------------------------------------===//
+
+void ReverseuOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value input) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({input});
+}
+
+
+void ReverseuOp::inferShapes() { 
+  auto inputTy = getOperand().getType().cast<RankedTensorType>();
+
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(inputTy.getShape().vec()[1]);
+  dims.push_back(inputTy.getShape().vec()[1]);
+
+  getResult().setType(RankedTensorType::get(dims, inputTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(ReverseuOp op) {
   auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
   auto resultType = op.getType().dyn_cast<RankedTensorType>();
   if (!inputType || !resultType)

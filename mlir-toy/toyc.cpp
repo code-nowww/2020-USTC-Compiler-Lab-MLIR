@@ -307,16 +307,7 @@ int main(int argc, char **argv) {
     module->dump();
     return 0;
   }
-
-#ifdef CUDA
-  if (emitAction == Action::RunCuda) {
-    llvm::outs() << "==============start cuda runner==============\n";
-    runMLIRPasses(*module);
-    llvm::outs() << "==============cuda runner done ==============\n";
-    return 0;
-  }
-#endif
-
+  
   // Check to see if we are compiling to LLVM IR.
   if (emitAction == Action::DumpLLVMIR)
     return dumpLLVMIR(*module);

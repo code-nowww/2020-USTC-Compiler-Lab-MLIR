@@ -105,7 +105,7 @@ public:
     // Gernerate a call to print a new line to distinguish tensors.
     auto newline = rewriter.create<CallOp>(loc, printfRef, rewriter.getIntegerType(32),
                                            newLineCst);
-    newline.getOperation()->moveBefore(firstLoop);
+    newline.getOperation()->moveAfter(firstLoop);
     // Notify the rewriter that this operation has been removed.
     rewriter.eraseOp(op);
     return success();

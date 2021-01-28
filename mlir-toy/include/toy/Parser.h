@@ -501,6 +501,12 @@ private:
         if (!varDecl)
           return nullptr;
         exprList->push_back(std::move(varDecl));
+      } else if (lexer.getCurToken() == tok_autodiff) {
+        // Autodiff variable declaration
+        auto varDecl = parseDeclaration(/*requiresInitializer=*/true);
+        if (!varDecl)
+          return nullptr;
+        exprList->push_back(std::move(varDecl));
       } else if (lexer.getCurToken() == tok_return) {
         // Return statement
         auto ret = parseReturn();

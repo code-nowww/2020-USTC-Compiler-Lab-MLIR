@@ -55,12 +55,14 @@ mlir-toy/
 
 1. 修改 Lexer.h, Parser.h 和 MLIRGen.cpp 以支持相应的符号(如减号 `-`, 矩阵乘号 `@`)
 2. 修改 Ops.td 增加相应操作, 如 `SubOp`, 此时其实就已经可以生成相应的头文件了.
-3. 修改 Dialect.cpp 以实现一些操作. 此处有特殊定制的 `build` 和 `inferShape` 函数(用于形状推断, 是 `ShapeInference` 接口所要求实现的). 应当注意, 如果后面我们有什么其他的更新, 这些算子也都要进行相应的更新.
-4. 在 LowerToAffineLoops.cpp 中对此 Op 进行 lowering. 由于已经有相应的支持(`BinaryOpLowering`), 只需要实例化它就好
-    ```cpp
-    using SubOpLowering = BinaryOpLowering<toy::SubOp, SubFOp>;
-    ```
-    实例化后, 向 `ToyToAffineLoweringPass::runOnFunction()` 里的 `pattern` 添加此 Lowering(即 `SubOpLowering`)
+3. 修改 Dialect.cpp 以实现一些操作. 此处有特殊定制的 `build`，`inferShape` 以及 `verify` 函数(`inferShape`用于形状推断, 是 `ShapeInference` 接口所要求实现的；`verify`用于判断输入输出的格式对错). 应当注意, 如果后面我们有什么其他的更新, 这些算子也都要进行相应的更新.
+4. 在 LowerToAffineLoops.cpp 中对此 Op 进行 lowering. 
+	1. 如果已经有相应的支持(`BinaryOpLowering`), 只需要实例化它就好
+    	```cpp
+    	using SubOpLowering = BinaryOpLowering<toy::SubOp, SubFOp>;
+    	```
+    	实例化后, 向 `ToyToAffineLoweringPass::runOnFunction()` 里的 `pattern` 添加此 Lowering(即 `SubOpLowering`)
+	2. 如果没有相应的支持，则需要类似“基于内置函数增加算子”的模式，手写该部分代码
 5. 编译
     如果在集群上编译需要运行
     ```shell
@@ -81,8 +83,52 @@ mlir-toy/
 
 #### 基于内置函数增加算子
 
-这其实非常类似，唯一的差别就是表达式和函数调用。
-- [ ] 万总 TODO
+1. 修改 MLIRGen.cpp 以支持相应的符号，相较于“基于运算符增加算子”，这里在 MLIRGen.cpp 中增加的是函数保留字
+2. 修改 Ops.td 增加相应操作, 如 `MatrixMulOp`
+3. 修改 Dialect.cpp 以实现一些操作. 此处有特殊定制的 `build`，`inferShape` 以及 `verify` 函数(`inferShape`用于形状推断, 是 `ShapeInference` 接口所要求实现的；`verify`用于判断输入输出的格式对错). 应当注意, 如果后面我们有什么其他的更新, 这些算子也都要进行相应的更新.
+4. 在 LowerToAffineLoops.cpp 中对此 Op 进行 lowering. 该部分操作相对繁杂多变，以求行列式为例
+	1. 该部分一般有固定的格式，如下:
+	
+		```cpp
+		struct DetOpLowering : public ConversionPattern {
+		  DetOpLowering(MLIRContext *ctx)
+		      : ConversionPattern(toy::DetOp::getOperationName(), 1, ctx) {}
+		
+		  LogicalResult
+		  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+		                  ConversionPatternRewriter &rewriter) const final {
+
+			···
+
+			buildAffineLoopNest(···
+			）{
+			···
+			}			
+
+		    // Replace this operation with the generated alloc.
+		    rewriter.replaceOp(op, alloc);
+		    return success();
+		  }
+		};
+		```	
+   
+5. 编译
+    如果在集群上编译需要运行
+    ```shell
+    cmake -G Ninja .. -DMLIR_DIR=/home/ustc/llvm-project-11.0.0/build/lib/cmake/mlir -DLLVM_DIR=/home/ustc/llvm-project-11.0.0/build/lib/cmake/llvm && cmake --build .
+    ```
+    我在自己电脑上编译了 MLIR 并安装好, 所以只需要:
+    ```shell
+    mkdir build && cd build
+    cmake .. && make
+6. 运行测试
+    ```
+    ./bin/toyc ../tests/subtract.toy -emit=mlir  # 生成 mlir
+    ./bin/toyc ../tests/subtract.toy -emit=mlir-affine  # 生成 mlir 和 affine 的混合中间表示
+    ./bin/toyc ../tests/subtract.toy -emit=mlir-llvm  # 生成 mlir 和 llvm 的混合中间表示
+    ./bin/toyc ../tests/subtract.toy -emit=llvm  # 生成 llvm
+    ./bin/toyc ../tests/subtract.toy -emit=jit  # 运行程序
+    ```
 
 ## 下推到 Affine
 

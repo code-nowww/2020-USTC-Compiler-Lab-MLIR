@@ -15,9 +15,18 @@
 #include "toy/Parser.h"
 #include "toy/Passes.h"
 
+#include "mlir/Conversion/GPUCommon/GPUCommonPass.h"
+#include "mlir/Conversion/GPUToNVVM/GPUToNVVMPass.h"
+#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
+#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Dialect/GPU/GPUDialect.h"
+#include "mlir/Dialect/GPU/Passes.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
+#include "mlir/ExecutionEngine/JitRunner.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/AsmState.h"
+#include "mlir/IR/Function.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Module.h"
 #include "mlir/IR/Verifier.h"
@@ -26,18 +35,26 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR.h"
+#include "mlir/Target/NVVMIR.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
-using namespace toy;
+#include "cuda.h"
+// #include "toy_cuda_runner.cpp"
+
+using namespace mlir::toy;
+using namespace ::toy;
 namespace cl = llvm::cl;
 
 static cl::opt<std::string> inputFilename(cl::Positional,
@@ -63,7 +80,8 @@ enum Action {
   DumpMLIRAffine,
   DumpMLIRLLVM,
   DumpLLVMIR,
-  RunJIT
+  RunJIT,
+  RunCuda
 };
 }
 static cl::opt<enum Action> emitAction(
@@ -79,12 +97,15 @@ static cl::opt<enum Action> emitAction(
     cl::values(clEnumValN(DumpLLVMIR, "llvm", "output the LLVM IR dump")),
     cl::values(
         clEnumValN(RunJIT, "jit",
-                   "JIT the code and run it by invoking the main function")));
+                   "JIT the code and run it by invoking the main function")),
+    cl::values(
+        clEnumValN(RunCuda, "cuda",
+                   "JIT the code and run it with cuda supports")));
 
 static cl::opt<bool> enableOpt("opt", cl::desc("Enable optimizations"));
 
 /// Returns a Toy AST resulting from parsing the file or a nullptr on error.
-std::unique_ptr<toy::ModuleAST> parseInputFile(llvm::StringRef filename) {
+std::unique_ptr<::toy::ModuleAST> parseInputFile(llvm::StringRef filename) {
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
       llvm::MemoryBuffer::getFileOrSTDIN(filename);
   if (std::error_code ec = fileOrErr.getError()) {
@@ -253,6 +274,93 @@ int runJit(mlir::ModuleOp module) {
   return 0;
 }
 
+namespace{
+using namespace mlir;
+inline void emit_cuda_error(const llvm::Twine &message, const char *buffer,
+                            CUresult error, mlir::Location loc) {
+  mlir::emitError(loc, message.concat(" failed with error code ")
+                     .concat(llvm::Twine{error})
+                     .concat("[")
+                     .concat(buffer)
+                     .concat("]"));
+}
+
+#define RETURN_ON_CUDA_ERROR(expr, msg)                                        \
+  {                                                                            \
+    auto _cuda_error = (expr);                                                 \
+    if (_cuda_error != CUDA_SUCCESS) {                                         \
+      emit_cuda_error(msg, jitErrorBuffer, _cuda_error, loc);                  \
+      return {};                                                               \
+    }                                                                          \
+  }
+
+mlir::OwnedBlob compilePtxToCubin(const std::string ptx, mlir::Location loc,
+                                  StringRef name) {
+  char jitErrorBuffer[4096] = {0};
+
+  RETURN_ON_CUDA_ERROR(cuInit(0), "cuInit");
+
+  // Linking requires a device context.
+  CUdevice device;
+  RETURN_ON_CUDA_ERROR(cuDeviceGet(&device, 0), "cuDeviceGet");
+  CUcontext context;
+  RETURN_ON_CUDA_ERROR(cuCtxCreate(&context, 0, device), "cuCtxCreate");
+  CUlinkState linkState;
+
+  CUjit_option jitOptions[] = {CU_JIT_ERROR_LOG_BUFFER,
+                               CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES};
+  void *jitOptionsVals[] = {jitErrorBuffer,
+                            reinterpret_cast<void *>(sizeof(jitErrorBuffer))};
+
+  RETURN_ON_CUDA_ERROR(cuLinkCreate(2,              /* number of jit options */
+                                    jitOptions,     /* jit options */
+                                    jitOptionsVals, /* jit option values */
+                                    &linkState),
+                       "cuLinkCreate");
+
+  RETURN_ON_CUDA_ERROR(
+      cuLinkAddData(linkState, CUjitInputType::CU_JIT_INPUT_PTX,
+                    const_cast<void *>(static_cast<const void *>(ptx.c_str())),
+                    ptx.length(), name.data(), /* kernel name */
+                    0,                         /* number of jit options */
+                    nullptr,                   /* jit options */
+                    nullptr                    /* jit option values */
+                    ),
+      "cuLinkAddData");
+
+  void *cubinData;
+  size_t cubinSize;
+  RETURN_ON_CUDA_ERROR(cuLinkComplete(linkState, &cubinData, &cubinSize),
+                       "cuLinkComplete");
+
+  char *cubinAsChar = static_cast<char *>(cubinData);
+  OwnedBlob result =
+      std::make_unique<std::vector<char>>(cubinAsChar, cubinAsChar + cubinSize);
+
+  // This will also destroy the cubin data.
+  RETURN_ON_CUDA_ERROR(cuLinkDestroy(linkState), "cuLinkDestroy");
+
+  return result;
+}
+
+static LogicalResult runMLIRPasses(ModuleOp m) {
+  PassManager pm(m.getContext());
+  applyPassManagerCLOptions(pm);
+
+  pm.addPass(createGpuKernelOutliningPass());
+  auto &kernelPm = pm.nest<gpu::GPUModuleOp>();
+  kernelPm.addPass(createStripDebugInfoPass());
+  kernelPm.addPass(createLowerGpuOpsToNVVMOpsPass());
+  kernelPm.addPass(createConvertGPUKernelToBlobPass(
+      translateModuleToNVVMIR, compilePtxToCubin, "nvptx64-nvidia-cuda",
+      "sm_35", "+ptx60", "nvvm.cubin"));
+  pm.addPass(mlir::createLowerToLLVMPass());
+  pm.addPass(createConvertGpuLaunchFuncToGpuRuntimeCallsPass());
+
+  return pm.run(m);
+}
+}
+
 int main(int argc, char **argv) {
   mlir::registerAllDialects();
 
@@ -262,6 +370,19 @@ int main(int argc, char **argv) {
   mlir::registerPassManagerCLOptions();
 
   cl::ParseCommandLineOptions(argc, argv, "toy compiler\n");
+  
+  llvm::InitLLVM y(argc, argv);
+
+  // // Initialize LLVM backend.
+  // mlir::initializeLLVMPasses();
+  // llvm::InitializeNativeTarget();
+  // llvm::InitializeNativeTargetAsmPrinter();
+  // // Initialize LLVM NVPTX backend.
+  // LLVMInitializeNVPTXTarget();
+  // LLVMInitializeNVPTXTargetInfo();
+  // LLVMInitializeNVPTXTargetMC();
+  // LLVMInitializeNVPTXAsmPrinter();
+
 
   if (emitAction == Action::DumpAST)
     return dumpAST();
@@ -280,6 +401,12 @@ int main(int argc, char **argv) {
   bool isOutputingMLIR = emitAction <= Action::DumpMLIRLLVM;
   if (isOutputingMLIR) {
     module->dump();
+    return 0;
+  }
+
+  if (emitAction == Action::RunCuda) {
+    llvm::outs() << "==============start cuda runner==============\n";
+    runMLIRPasses(*module);
     return 0;
   }
 

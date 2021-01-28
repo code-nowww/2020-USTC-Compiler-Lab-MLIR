@@ -664,7 +664,9 @@ private:
     case '.':
       return 60;
     case '@':
-      return 80;
+      return 40;
+    case '/':
+      return 40;
     default:
       return -1;
     }

@@ -593,6 +593,42 @@ static mlir::LogicalResult verify(LUplusOp op) {
   return mlir::success();
 }
 
+//===----------------------------------------------------------------------===//
+// LUplusOp
+//===----------------------------------------------------------------------===//
+
+void DetOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value input) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({input});
+}
+
+
+void DetOp::inferShapes() { 
+  auto inputTy = getOperand().getType().cast<RankedTensorType>();
+
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(1);
+  dims.push_back(1);
+
+  getResult().setType(RankedTensorType::get(dims, inputTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(DetOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto inputShape = inputType.getShape().vec();
+  auto resultShape = resultType.getShape().vec();
+  
+  if (inputType.getElementType() != resultType.getElementType()) {
+    return op.emitError()
+           << "error in the LU OP's operands type, should have same type";
+  }
+  return mlir::success();
+}
 
 //===----------------------------------------------------------------------===//
 // ConvSomeOp

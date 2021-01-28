@@ -590,6 +590,17 @@ private:
       return builder.create<LUplusOp>(location, luplus);
     }
 
+    if (callee == "det") {
+      if (call.getArgs().size() != 1) {
+        emitError(location, "MLIR codegen encountered an error: toy.conv "
+                            "only accept two arguments");
+        return nullptr;
+      }
+      auto luplus =  builder.create<LUOp>(location, operands[0]);
+      auto lu = builder.create<LUplusOp>(location, luplus);
+      return builder.create<DetOp>(location, lu);
+    }
+
     // Otherwise this is a call to a user-defined function. Calls to
     // user-defined functions are mapped to a custom call that takes the callee
     // name as an attribute.

@@ -757,6 +757,66 @@ struct LUplusOpLowering : public ConversionPattern {
   }
 };
 
+struct DetOpLowering : public ConversionPattern {
+  DetOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::DetOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+   
+    auto loc = op->getLoc();
+    auto resultType = (*op->result_type_begin()).cast<TensorType>();
+    auto targetType = op->getOperand(0).getType().cast<TensorType>();
+    auto looplen = targetType.getShape().vec()[1];
+    auto memRefType = convertTensorToMemRef(resultType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    SmallVector<int64_t, 2> firstlowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 2> firstupperBounds;
+    SmallVector<int64_t, 2> steps(2, /*Value=*/1);
+    firstupperBounds.push_back(1);
+    firstupperBounds.push_back(1);
+    buildAffineLoopNest(
+      rewriter, loc, firstlowerBounds, firstupperBounds, steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+        
+        const APFloat onee(1.0);
+        auto One = rewriter.create<ConstantFloatOp>(loc,onee,nestedBuilder.getF64Type());
+        nestedBuilder.create<AffineStoreOp>(loc, One, alloc, ivs); 
+      });
+
+    SmallVector<int64_t, 2> secondlowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 2> secondupperBounds;
+    secondupperBounds.push_back(looplen);
+    secondupperBounds.push_back(1);
+
+    buildAffineLoopNest(
+      rewriter, loc, secondlowerBounds, secondupperBounds, steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+        
+        SmallVector<AffineExpr, 2> Uexprs, exprs;
+        toy::DetOpAdaptor DetAdaptor(operands);
+        Value target = DetAdaptor.input();
+
+        Uexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()) + 
+                         getAffineConstantExpr(looplen, nestedBuilder.getContext()));
+        Uexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+        exprs.push_back(getAffineConstantExpr(0, nestedBuilder.getContext()));
+        exprs.push_back(getAffineConstantExpr(0, nestedBuilder.getContext())); 
+      
+        auto det = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, exprs, nestedBuilder.getContext()), ivs);
+        auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
+        auto muled = nestedBuilder.create<MulFOp>(loc, det, Uloaded);
+        nestedBuilder.create<AffineStoreOp>(loc, muled, alloc, AffineMap::get(2, 0, exprs, nestedBuilder.getContext()), ivs); 
+      });
+
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
+
 } // end anonymous namespace.
 
 //===----------------------------------------------------------------------===//
@@ -809,7 +869,7 @@ void ToyToAffineLoweringPass::runOnFunction() {
   patterns.insert<AddOpLowering, SubOpLowering, ConstantOpLowering, MulOpLowering,
                   ReturnOpLowering, TransposeOpLowering, ConvValidOpLowering, 
                   FillFullOpLowering, FillSomeOpLowering, MatrixMulOpLowering,
-                  LUOpLowering, LUplusOpLowering, CmpOpLowering>(&getContext());
+                  LUOpLowering, LUplusOpLowering, CmpOpLowering, DetOpLowering>(&getContext());
 
   // With the target and rewrite patterns defined, we can now attempt the
   // conversion. The conversion will signal failure if any of our `illegal`

@@ -1177,7 +1177,7 @@ void ToyToAffineLoweringPass::runOnFunction() {
                   ReturnOpLowering, TransposeOpLowering, ConvValidOpLowering, 
                   FillFullOpLowering, FillSomeOpLowering, MatrixMulOpLowering,
                   LUOpLowering, LUplusOpLowering, CmpOpLowering, DetOpLowering,
-                  DivOpLowering, AdjointOpLowering, InverseOpLowering,
+                  DivOpLowering, 
                   ReverseOpLowering, ReverserOpLowering, ReverseuOpLowering>(&getContext());
 
   // With the target and rewrite patterns defined, we can now attempt the

@@ -50,9 +50,6 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "cuda.h"
-// #include "toy_cuda_runner.cpp"
-
 using namespace mlir::toy;
 using namespace ::toy;
 namespace cl = llvm::cl;
@@ -274,6 +271,7 @@ int runJit(mlir::ModuleOp module) {
   return 0;
 }
 
+#ifdef CUDA
 namespace{
 using namespace mlir;
 inline void emit_cuda_error(const llvm::Twine &message, const char *buffer,
@@ -360,6 +358,7 @@ static LogicalResult runMLIRPasses(ModuleOp m) {
   return pm.run(m);
 }
 }
+#endif
 
 int main(int argc, char **argv) {
   mlir::registerAllDialects();
@@ -377,11 +376,13 @@ int main(int argc, char **argv) {
   mlir::initializeLLVMPasses();
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
+#ifdef CUDA
   // Initialize LLVM NVPTX backend.
   LLVMInitializeNVPTXTarget();
   LLVMInitializeNVPTXTargetInfo();
   LLVMInitializeNVPTXTargetMC();
   LLVMInitializeNVPTXAsmPrinter();
+#endif
 
 
   if (emitAction == Action::DumpAST)
@@ -404,12 +405,14 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+#ifdef CUDA
   if (emitAction == Action::RunCuda) {
     llvm::outs() << "==============start cuda runner==============\n";
     runMLIRPasses(*module);
     llvm::outs() << "==============cuda runner done ==============\n";
     return 0;
   }
+#endif
 
   // Check to see if we are compiling to LLVM IR.
   if (emitAction == Action::DumpLLVMIR)

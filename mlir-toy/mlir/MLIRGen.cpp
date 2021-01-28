@@ -610,6 +610,20 @@ private:
       return builder.create<LUplusOp>(location, luplus);
     }
 
+    if (callee == "reverse") {
+      if (call.getArgs().size() != 1) {
+        emitError(location, "MLIR codegen encountered an error: toy.conv "
+                            "only accept two arguments");
+        return nullptr;
+      }
+      auto luplus =  builder.create<LUOp>(location, operands[0]);
+      auto lu = builder.create<LUplusOp>(location, luplus);
+      auto ru = builder.create<ReverseOp>(location, lu);
+      auto r = builder.create<ReverserOp>(location, ru);
+      auto u = builder.create<ReverseuOp>(location, ru);
+      return builder.create<MatrixMulOp>(location, r,u);
+    }
+
     if (callee == "det") {
       if (call.getArgs().size() != 1) {
         emitError(location, "MLIR codegen encountered an error: toy.conv "

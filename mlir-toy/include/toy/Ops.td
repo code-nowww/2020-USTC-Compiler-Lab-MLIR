@@ -399,6 +399,63 @@ def DetOp : Toy_Op<"det",
   let verifier = [{ return ::verify(*this); }];
 }
 
+def ReverseOp : Toy_Op<"reverse",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "LU decomposition";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Allow building an ConvOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+  // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def ReverserOp : Toy_Op<"getr",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "LU decomposition";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Allow building an ConvOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+  // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def ReverseuOp : Toy_Op<"getu",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "LU decomposition";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Allow building an ConvOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+  // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
 def CastOp : Toy_Op<"cast",
     [DeclareOpInterfaceMethods<ShapeInferenceOpInterface>, NoSideEffect,
      SameOperandsAndResultShape]> {

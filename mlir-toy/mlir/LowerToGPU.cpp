@@ -195,50 +195,37 @@ struct MatrixMulOpLowering : public ConversionPattern {
   auto memRefType = convertTensorToMemRef(tensorType);
   auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter, op->getParentOfType<ModuleOp>());
 
-  SmallVector<int64_t, 4> LowerBounds(2, /*Value=*/0);
-  SmallVector<int64_t, 4> Steps(2, /*Value=*/1);
-  
-  buildAffineLoopNest(
-    rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
-    [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
-      const APFloat zero((float)0.0);
-      nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF32Type()), alloc, ivs);
-    });
-  
-  SmallVector<int64_t, 4> loopShape;
-  SmallVector<int64_t, 4> loopLowerBounds(3, /*Value=*/0);
-  SmallVector<int64_t, 4> steps(3, /*Value=*/1); 
+  // get the shape to set gridSize and blockSize
+  auto shape = tensorType.getShape().vec();
+  auto const_1 = rewriter.create<ConstantIndexOp>(loc, 1);
+  auto shapeX = rewriter.create<ConstantIndexOp>(loc, shape[0]);
+  auto shapeY = rewriter.create<ConstantIndexOp>(loc, shape[1]);
+  gpu::KernelDim3 gridSizes = {shapeX, shapeY, const_1};
+  gpu::KernelDim3 blockSizes = {shapeY, const_1, const_1};
 
-  loopShape.push_back(op->getOperand(0).getType().cast<TensorType>().getShape().vec()[0]);
-  loopShape.push_back(op->getOperand(0).getType().cast<TensorType>().getShape().vec()[1]);
-  loopShape.push_back(op->getOperand(1).getType().cast<TensorType>().getShape().vec()[1]);
-  
-  buildAffineLoopNest(
-    rewriter, loc, loopLowerBounds, loopShape, steps,
-    [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+  auto launchOp = rewriter.create<gpu::LaunchOp>(loc,
+                                              gridSizes.x, gridSizes.y, gridSizes.z,
+                                              blockSizes.x, blockSizes.y, blockSizes.z);
 
-      toy::MatrixMulOpAdaptor MatrixMulAdaptor(operands);
-      Value lhs = MatrixMulAdaptor.lhs();
-      Value rhs = MatrixMulAdaptor.rhs();
+  typename toy::MatrixMulOp::Adaptor MatrixMulAdaptor(operands);
+  ValueRange indicesLhs({launchOp.getBlockIds().x, launchOp.getThreadIds().x});
+  ValueRange indicesRhs({launchOp.getThreadIds().x, launchOp.getBlockIds().y});
+  ValueRange indicesResult({launchOp.getBlockIds().x, launchOp.getBlockIds().y});
 
-      SmallVector<AffineExpr, 2> lhsExprs, rhsExprs, resultExprs;
+  // mul and reduce operation in gpu
+  rewriter.setInsertionPointToStart(&launchOp.body().front());
+  auto LoadedLhs = rewriter.create<mlir::LoadOp>(loc, MatrixMulAdaptor.lhs(), indicesLhs);
+  auto LoadedRhs = rewriter.create<mlir::LoadOp>(loc, MatrixMulAdaptor.rhs(), indicesRhs);
+  auto mulResult = rewriter.create<mlir::MulFOp>(loc, LoadedLhs, LoadedRhs);
+  auto ReducedResult = rewriter.create<gpu::AllReduceOp>(loc, 
+                                                         rewriter.getF32Type(), 
+                                                         mulResult, 
+                                                         StringAttr::get("add",rewriter.getContext()));
+  auto StoredResult = rewriter.create<mlir::StoreOp>(loc, ReducedResult, alloc, indicesResult);
+  auto terminator =  rewriter.create<gpu::TerminatorOp>(loc);
+  rewriter.setInsertionPointToEnd(&launchOp.body().front());
 
-      lhsExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
-      lhsExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
-      rhsExprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
-      rhsExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
-      resultExprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
-      resultExprs.push_back(getAffineDimExpr(2, nestedBuilder.getContext()));
-
-      auto LoadedLhs = nestedBuilder.create<mlir::AffineLoadOp>(loc, lhs, AffineMap::get(3, 0, lhsExprs, nestedBuilder.getContext()), ivs);
-      auto LoadedRhs = nestedBuilder.create<mlir::AffineLoadOp>(loc, rhs, AffineMap::get(3, 0, rhsExprs, nestedBuilder.getContext()), ivs);
-      auto mulResult = nestedBuilder.create<mlir::MulFOp>(loc, LoadedLhs, LoadedRhs);
-      auto LoadedResult = nestedBuilder.create<mlir::AffineLoadOp>(loc, alloc, AffineMap::get(3, 0, resultExprs, nestedBuilder.getContext()), ivs);
-      auto addResult = nestedBuilder.create<mlir::AddFOp>(loc, mulResult, LoadedResult);
-      nestedBuilder.create<AffineStoreOp>(loc, addResult, alloc, AffineMap::get(3, 0, resultExprs, nestedBuilder.getContext()), ivs);
-    });
-
-  // Replace this operation with the generated alloc.
+  // // Replace this operation with the generated alloc.
   rewriter.replaceOp(op, alloc);
   return success();
   }

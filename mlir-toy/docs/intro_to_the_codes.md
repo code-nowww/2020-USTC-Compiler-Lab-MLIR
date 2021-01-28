@@ -82,7 +82,33 @@ mlir-toy/
 #### 基于内置函数增加算子
 
 这其实非常类似，唯一的差别就是表达式和函数调用。
-- [ ] 万总 TODO
+
+1. 修改 Ops.td 增加相应操作, 如 `MatrixMulOp`
+2. 修改 Dialect.cpp 以实现一些操作. 此处有特殊定制的 `build` 和 `inferShape` 函数(用于形状推断, 是 `ShapeInference` 接口所要求实现的). 应当注意, 如果后面我们有什么其他的更新, 这些算子也都要进行相应的更新.
+3. 在 LowerToAffineLoops.cpp 中对此 Op 进行 lowering. 
+    ```cpp
+    using SubOpLowering = BinaryOpLowering<toy::SubOp, SubFOp>;
+    ```
+    实例化后, 向 `ToyToAffineLoweringPass::runOnFunction()` 里的 `pattern` 添加此 Lowering(即 `SubOpLowering`)
+4. MLIRGen.cpp
+5. 编译
+    如果在集群上编译需要运行
+    ```shell
+    cmake -G Ninja .. -DMLIR_DIR=/home/ustc/llvm-project-11.0.0/build/lib/cmake/mlir -DLLVM_DIR=/home/ustc/llvm-project-11.0.0/build/lib/cmake/llvm && cmake --build .
+    ```
+    我在自己电脑上编译了 MLIR 并安装好, 所以只需要:
+    ```shell
+    mkdir build && cd build
+    cmake .. && make
+6. 运行测试
+    ```
+    ./bin/toyc ../tests/subtract.toy -emit=mlir  # 生成 mlir
+    ./bin/toyc ../tests/subtract.toy -emit=mlir-affine  # 生成 mlir 和 affine 的混合中间表示
+    ./bin/toyc ../tests/subtract.toy -emit=mlir-llvm  # 生成 mlir 和 llvm 的混合中间表示
+    ./bin/toyc ../tests/subtract.toy -emit=llvm  # 生成 llvm
+    ./bin/toyc ../tests/subtract.toy -emit=jit  # 运行程序
+    ```
+
 
 ## 下推到 Affine
 

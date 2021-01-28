@@ -287,6 +287,9 @@ void SubOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 // SubOp
 
 void CmpOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+// DivOp
+
+void DivOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value lhs, mlir::Value rhs) {
   state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
   state.addOperands({lhs, rhs});
@@ -295,6 +298,9 @@ void CmpOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 /// Infer the output shape of the SubOp, this is required by the shape inference
 /// interface.
 void CmpOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
+/// Infer the output shape of the DivOp, this is required by the shape inference
+/// interface.
+void DivOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 
 //===----------------------------------------------------------------------===//
 // ConvValidOp
@@ -669,8 +675,8 @@ static mlir::LogicalResult verify(ConvSomeOp op) {
     return op.emitError()
            << "error in the Conv2d OP's operands type, should have same type";
   }
+  return mlir::success();
 }
-
 
 // MatrixMulOp
 
@@ -712,6 +718,87 @@ static mlir::LogicalResult verify(MatrixMulOp op) {
   if ((resultShape[0] != lhsShape[0])||(resultShape[1] != rhsShape[1])) {
     return op.emitError()
            << "expected result shape to be a multiplication of the inputs";
+  }
+  return mlir::success();
+}
+
+// InverseOp
+
+void InverseOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                        mlir::Value value) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands(value);
+}
+/// Infer the output shape of the InverseOp, this is required by the shape inference interface.
+/// Modified from TransposeOp
+void InverseOp::inferShapes() {
+  auto arrayTy = getOperand().getType().cast<RankedTensorType>();
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(arrayTy.getShape().vec()[0]);
+  dims.push_back(arrayTy.getShape().vec()[1]);
+  getResult().setType(RankedTensorType::get(dims, arrayTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(InverseOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto resultShape = resultType.getShape().vec();
+  auto inputShape = inputType.getShape();
+  if (inputShape[0] != inputShape[1]) {
+    return op.emitError()
+           << "inputs shape error";
+  }
+  if (resultShape[0] != resultShape[1]) {
+    return op.emitError()
+           << "result shape error";
+  }
+  if (resultShape[0] != inputShape[0]) {
+    return op.emitError()
+           << "result shape and input shape don't match";
+  }
+  return mlir::success();
+}
+
+// AdjointOp
+
+void AdjointOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                        mlir::Value value) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands(value);
+}
+
+/// Infer the output shape of the AdjointOp, this is required by the shape inference interface.
+/// Modified from TransposeOp
+void AdjointOp::inferShapes() {
+  auto arrayTy = getOperand().getType().cast<RankedTensorType>();
+  SmallVector<int64_t, 2> dims;
+  dims.push_back(arrayTy.getShape().vec()[0]);
+  dims.push_back(arrayTy.getShape().vec()[1]);
+  getResult().setType(RankedTensorType::get(dims, arrayTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(AdjointOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto resultShape = resultType.getShape().vec();
+  auto inputShape = inputType.getShape();
+  if (inputShape[0] != inputShape[1]) {
+    return op.emitError()
+           << "inputs shape error";
+  }
+  if (resultShape[0] != resultShape[1]) {
+    return op.emitError()
+           << "result shape error";
+  }
+  if (resultShape[0] != inputShape[0]) {
+    return op.emitError()
+           << "result shape and input shape don't match";
   }
   return mlir::success();
 }

@@ -339,6 +339,10 @@ private:
       return builder.create<MulOp>(location, lhs, rhs);
     case '>':
       return builder.create<CmpOp>(location, lhs, rhs);
+    case '/':
+      return builder.create<DivOp>(location, lhs, rhs);
+    case '@':
+      return builder.create<MatrixMulOp>(location, lhs, rhs);
     }
 
     emitError(location, "invalid binary operator '") << binop.getOp() << "'";
@@ -533,6 +537,22 @@ private:
       return builder.create<CmpOp>(location, operands[0],operands[1]);
     }
 
+    if (callee == "inverse") {
+      if (call.getArgs().size() != 1) {
+        emitError(location, "MLIR codegen encountered an error: toy.inverse "
+                            "does not accept multiple arguments");
+        return nullptr;
+      }
+      return builder.create<InverseOp>(location, operands[0]);
+    }
+    if (callee == "adjoint") {
+      if (call.getArgs().size() != 1) {
+        emitError(location, "MLIR codegen encountered an error: toy.adjoint "
+                            "does not accept multiple arguments");
+        return nullptr;
+      }
+      return builder.create<AdjointOp>(location, operands[0]);
+    }
     if (callee == "conv_val") {
       if (call.getArgs().size() != 2) {
         emitError(location, "MLIR codegen encountered an error: toy.conv "

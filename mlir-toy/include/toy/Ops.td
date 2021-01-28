@@ -186,6 +186,26 @@ def SubOp : Toy_Op<"sub",
   ];
 }
 
+def DivOp : Toy_Op<"div",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "element-wise divide operation";
+  let description = [{
+    The "div" operation performs element-wise divide between two tensors.
+    The shapes of the tensor operands are expected to match.
+  }];
+
+  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
+  let results = (outs F64Tensor);
+
+  // Specify a parser and printer method.
+  let parser = [{ return ::parseBinaryOp(parser, result); }];
+  let printer = [{ return ::printBinaryOp(p, *this); }];
+
+  // Allow building an AddOp with from the two input operands.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value lhs, Value rhs">
+  ];
+}
 
 def ConvValidOp : Toy_Op<"conv_val",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
@@ -602,6 +622,52 @@ def TransposeOp : Toy_Op<"transpose",
   ];
 
   // Invoke a static verify method to verify this transpose operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def InverseOp : Toy_Op<"inverse",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "inverse operation";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Enable registering canonicalization patterns with this operation.
+  let hasCanonicalizer = 1;
+
+  // Allow building a InverseOp with from the input operand.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+
+  // Invoke a static verify method to verify this InverseOp operation.
+  let verifier = [{ return ::verify(*this); }];
+}
+
+def AdjointOp : Toy_Op<"adjoint",
+    [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
+  let summary = "adjoint operation";
+
+  let arguments = (ins F64Tensor:$input);
+  let results = (outs F64Tensor);
+
+  let assemblyFormat = [{
+    `(` $input `:` type($input) `)` attr-dict `to` type(results)
+  }];
+
+  // Enable registering canonicalization patterns with this operation.
+  let hasCanonicalizer = 1;
+
+  // Allow building a AdjointOp with from the input operand.
+  let builders = [
+    OpBuilder<"OpBuilder &b, OperationState &state, Value input">
+  ];
+
+  // Invoke a static verify method to verify this AdjointOp operation.
   let verifier = [{ return ::verify(*this); }];
 }
 

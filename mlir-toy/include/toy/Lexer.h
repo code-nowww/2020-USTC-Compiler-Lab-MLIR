@@ -44,6 +44,7 @@ enum Token : int {
   tok_var = -3,
   tok_def = -4,
   tok_struct = -5,
+  tok_autodiff = -8,
 
   // primary
   tok_identifier = -6,
@@ -148,6 +149,8 @@ private:
         return tok_struct;
       if (identifierStr == "var")
         return tok_var;
+      if (identifierStr == "autodiff")
+        return tok_autodiff;
       return tok_identifier;
     }
 

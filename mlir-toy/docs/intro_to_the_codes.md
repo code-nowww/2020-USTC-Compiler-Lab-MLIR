@@ -133,11 +133,21 @@ mlir-toy/
 ## 下推到 Affine
 
 这里我们添加了一些算子，目前测试无误的有，
+- 基本的二元运算如对应位置的加减乘除等。
+- 矩阵乘法（内积）
+    测试文件位于tests/matrixmul.toy, 通过`Matrixmul(a,b)`进行调用。
 
 - 三种不同模式的卷积
-  - 
-    
+    我们用图进行说明, 依次为full some和valid
+    <center> 
+        <img src="images/full.png" style="zoom: 30%;" /><img    src="images/same.png" style="zoom: 30%;" /><img src="images/   valid.png" style="zoom: 30%;"/>
+    </center>
+        通过`conv_full`，`conv_some`，`conv_valid`进行调用，可以在tests里看到测试文件。
 
+- 矩阵LU分解与矩阵的行列式
+  这部分的测试文件在tests/lu_and_det.toy中进行了测试，分别通过`lu()`和`det()`实现，结果如下。
+    ![](images/lu.png)
+    和python做的结果比较，验证结果是正确的。（本次测试没来得及展示行列式，您可以自己运行tests中的文件进行测试。
 ## 下推到 GPU
 
 MLIR 提供了 GPU 相关的 Dialect, 通过把 toy 语言的 Dialect 下推到这个 GPU Dialect, 我们可以很方便的调用 CUDA 等 GPU 模型来运行我们的程序. 换句话说, 我们就可以直接让用 toy 语言编写的程序运行在 GPU 上.

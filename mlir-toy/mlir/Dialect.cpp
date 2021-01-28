@@ -562,6 +562,10 @@ static mlir::LogicalResult verify(ConvSomeOp op) {
   if (targetType.getElementType() != kernelType.getElementType()) {
     return op.emitError()
            << "error in the Conv2d OP's operands type, should have same type";
+  }
+  return mlir::success();
+}
+
 // MatrixMulOp
 
 void MatrixMulOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,

@@ -78,7 +78,7 @@ add_public_tablegen_target(ToyCombineIncGen)
 
 set(LLVM_OPTIONAL_SOURCES
   toyc.cpp
-  toy_cuda_runner.cpp
+  toy-cuda-runner.cpp
   cuda-runtime-wrappers.cpp
   parser/AST.cpp
   mlir/MLIRGen.cpp
@@ -93,6 +93,7 @@ set(LLVM_OPTIONAL_SOURCES
 
 add_llvm_executable(toyc
   toyc.cpp
+  toy-cuda-runner.cpp
   cuda-runtime-wrappers.cpp
   parser/AST.cpp
   mlir/MLIRGen.cpp
@@ -157,7 +158,7 @@ FOREACH(t ${TARGET_LIBS})
 ENDFOREACH(t)
 
 add_llvm_tool(toy-cuda-runner
-  toy_cuda_runner.cpp
+  toy-cuda-runner.cpp
 
     DEPENDS
     cuda-runtime-wrappers

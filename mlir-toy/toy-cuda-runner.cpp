@@ -115,8 +115,8 @@ static LogicalResult runMLIRPasses(ModuleOp m) {
   return pm.run(m);
 }
 
-/*
-int main(int argc, char **argv) {
+
+int main1(int argc, char **argv) {
   registerPassManagerCLOptions();
   mlir::registerAllDialects();
   llvm::InitLLVM y(argc, argv);
@@ -132,4 +132,4 @@ int main(int argc, char **argv) {
   mlir::initializeLLVMPasses();
   return mlir::JitRunnerMain(argc, argv, &runMLIRPasses);
 }
-*/
+

@@ -370,18 +370,18 @@ int main(int argc, char **argv) {
   mlir::registerPassManagerCLOptions();
 
   cl::ParseCommandLineOptions(argc, argv, "toy compiler\n");
-  
+
   llvm::InitLLVM y(argc, argv);
 
-  // // Initialize LLVM backend.
-  // mlir::initializeLLVMPasses();
-  // llvm::InitializeNativeTarget();
-  // llvm::InitializeNativeTargetAsmPrinter();
-  // // Initialize LLVM NVPTX backend.
-  // LLVMInitializeNVPTXTarget();
-  // LLVMInitializeNVPTXTargetInfo();
-  // LLVMInitializeNVPTXTargetMC();
-  // LLVMInitializeNVPTXAsmPrinter();
+  // Initialize LLVM backend.
+  mlir::initializeLLVMPasses();
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+  // Initialize LLVM NVPTX backend.
+  LLVMInitializeNVPTXTarget();
+  LLVMInitializeNVPTXTargetInfo();
+  LLVMInitializeNVPTXTargetMC();
+  LLVMInitializeNVPTXAsmPrinter();
 
 
   if (emitAction == Action::DumpAST)
@@ -407,6 +407,7 @@ int main(int argc, char **argv) {
   if (emitAction == Action::RunCuda) {
     llvm::outs() << "==============start cuda runner==============\n";
     runMLIRPasses(*module);
+    llvm::outs() << "==============cuda runner done ==============\n";
     return 0;
   }
 
@@ -415,8 +416,12 @@ int main(int argc, char **argv) {
     return dumpLLVMIR(*module);
 
   // Otherwise, we must be running the jit.
-  if (emitAction == Action::RunJIT)
-    return runJit(*module);
+  if (emitAction == Action::RunJIT) {
+    llvm::outs() << "==============start jit runner==============\n";
+    auto ret = runJit(*module);
+    llvm::outs() << "==============jit runner done ==============\n";
+    return ret;
+  }
 
   llvm::errs() << "No action specified (parsing only?), use -emit=<action>\n";
   return -1;

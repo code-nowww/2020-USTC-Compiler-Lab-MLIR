@@ -86,7 +86,7 @@ public:
   }
 
   /// Return the current number (prereq: getCurToken() == tok_number)
-  double getValue() {
+  float getValue() {
     assert(curTok == tok_number);
     return numVal;
   }
@@ -196,7 +196,7 @@ private:
   std::string identifierStr;
 
   /// If the current Token is a number, this contains the value.
-  double numVal = 0;
+  float numVal = 0;
 
   /// The last value returned by getNextChar(). We need to keep it around as we
   /// always need to read ahead one character to decide when to end a token and

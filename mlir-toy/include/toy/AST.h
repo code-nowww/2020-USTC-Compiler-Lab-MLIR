@@ -63,12 +63,12 @@ using ExprASTList = std::vector<std::unique_ptr<ExprAST>>;
 
 /// Expression class for numeric literals like "1.0".
 class NumberExprAST : public ExprAST {
-  double Val;
+  float Val;
 
 public:
-  NumberExprAST(Location loc, double val) : ExprAST(Expr_Num, loc), Val(val) {}
+  NumberExprAST(Location loc, float val) : ExprAST(Expr_Num, loc), Val(val) {}
 
-  double getValue() { return Val; }
+  float getValue() { return Val; }
 
   /// LLVM style RTTI
   static bool classof(const ExprAST *c) { return c->getKind() == Expr_Num; }

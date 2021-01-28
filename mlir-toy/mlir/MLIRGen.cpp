@@ -337,6 +337,8 @@ private:
       return builder.create<SubOp>(location, lhs, rhs);
     case '*':
       return builder.create<MulOp>(location, lhs, rhs);
+    case '@':
+      return builder.create<MatrixMulOp>(location, lhs, rhs);
     }
 
     emitError(location, "invalid binary operator '") << binop.getOp() << "'";

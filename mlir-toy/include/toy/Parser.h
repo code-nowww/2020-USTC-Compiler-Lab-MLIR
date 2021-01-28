@@ -657,6 +657,8 @@ private:
       return 40;
     case '.':
       return 60;
+    case '@':
+      return 80;
     default:
       return -1;
     }

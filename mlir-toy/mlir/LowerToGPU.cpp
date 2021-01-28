@@ -22,6 +22,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/Sequence.h"
+#include <iostream>
 
 using namespace mlir;
 
@@ -208,9 +209,13 @@ struct MatrixMulOpLowering : public ConversionPattern {
                                                  blockSizes.x, blockSizes.y, blockSizes.z);
 
   typename toy::MatrixMulOp::Adaptor MatrixMulAdaptor(operands);
-  ValueRange indicesLhs({launchOp.getBlockIds().x, launchOp.getThreadIds().x});
-  ValueRange indicesRhs({launchOp.getThreadIds().x, launchOp.getBlockIds().y});
-  ValueRange indicesResult({launchOp.getBlockIds().x, launchOp.getBlockIds().y});
+  // ValueRange indicesLhs({launchOp.getBlockIds().x, launchOp.getThreadIds().x});
+  // ValueRange indicesRhs({launchOp.getThreadIds().x, launchOp.getBlockIds().y});
+  // ValueRange indicesResult({launchOp.getBlockIds().x, launchOp.getBlockIds().y});
+
+  SmallVector<Value, 2> indicesLhs({launchOp.getBlockIds().x, launchOp.getThreadIds().x});
+  SmallVector<Value, 2> indicesRhs({launchOp.getThreadIds().x, launchOp.getBlockIds().y});
+  SmallVector<Value, 2> indicesResult({launchOp.getBlockIds().x, launchOp.getBlockIds().y});
 
   // mul and reduce operation in gpu
   rewriter.setInsertionPointToStart(&launchOp.body().front());
@@ -358,8 +363,14 @@ struct TransposeOpLowering : public ConversionPattern {
     rewriter.setInsertionPointToStart(&launchOp.body().front());
 
     typename toy::TransposeOp::Adaptor transposeAdaptor(operands);
-    ValueRange indices({launchOp.getBlockIds().x, launchOp.getThreadIds().x});
-    ValueRange transIndices({launchOp.getThreadIds().x, launchOp.getBlockIds().x});
+    SmallVector<Value, 2> indices({launchOp.getThreadIds().x, launchOp.getBlockIds().x});
+    SmallVector<Value, 2> transIndices({launchOp.getBlockIds().x, launchOp.getThreadIds().x});
+    // SmallVector<Value, 2> indices, transIndices;
+    // indices.push_back(launchOp.getBlockIds().x);
+    // indices.push_back(launchOp.getThreadIds().x);
+    // transIndices.push_back(launchOp.getThreadIds().x);
+    // transIndices.push_back(launchOp.getBlockIds().x);
+
 
     auto load = rewriter.create<mlir::LoadOp>(loc, transposeAdaptor.input(), indices);
     auto store = rewriter.create<mlir::StoreOp>(loc, load, alloc, transIndices);

@@ -537,7 +537,7 @@ private:
       }
       return builder.create<CmpOp>(location, operands[0],operands[1]);
     }
-
+/*
     if (callee == "inverse") {
       if (call.getArgs().size() != 1) {
         emitError(location, "MLIR codegen encountered an error: toy.inverse "
@@ -554,6 +554,7 @@ private:
       }
       return builder.create<AdjointOp>(location, operands[0]);
     }
+    */
     if (callee == "conv_val") {
       if (call.getArgs().size() != 2) {
         emitError(location, "MLIR codegen encountered an error: toy.conv "

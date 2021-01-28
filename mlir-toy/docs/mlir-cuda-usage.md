@@ -18,4 +18,5 @@ RUN: mlir-cuda-runner %s --shared-libs=%cuda_wrapper_library_dir/libcuda-runtime
 例如在集群上，运行代码使用的命令如下
 ```
 mlir-cuda-runner all-reduce-and.mlir --shared-libs=/headless/llvm/llvm/llvm-build/lib/libcuda-runtime-wrappers.so,/headless/llvm/llvm/llvm-build/lib/libmlir_runner_utils.so --entry-point-result=void
+mlir-cuda-runner all-reduce-and.mlir --shared-libs=/optt/llvm-install/lib/libcuda-runtime-wrappers.so,/optt/llvm-install/lib/libmlir_runner_utils.so --entry-point-result=void
 ```

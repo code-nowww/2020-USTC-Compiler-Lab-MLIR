@@ -158,8 +158,8 @@ struct MatrixMulOpLowering : public ConversionPattern {
     buildAffineLoopNest(
         rewriter, loc, LowerBounds, tensorType.getShape(), Steps,
         [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
-          const APFloat zero(0.0);
-          nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF64Type()), alloc, ivs);
+          const APFloat zero((float)(0.0));
+          nestedBuilder.create<AffineStoreOp>(loc, rewriter.create<ConstantFloatOp>(loc, zero, nestedBuilder.getF32Type()), alloc, ivs);
         });
     
     SmallVector<int64_t, 4> loopShape;

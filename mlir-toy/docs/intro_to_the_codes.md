@@ -147,6 +147,8 @@ MLIR 提供了 GPU 相关的 Dialect, 通过把 toy 语言的 Dialect 下推到�
 2. 提高程序开发效率. 类似 CUDA 或 OpenCL 的编程模型相对复杂, 需要领域特定的知识才能完成相应的编程. 但这里我们让 toy 语言经过我们的编译器, 能够直接得到一个可以运行在 GPU 上的代码, 这无疑是大大提高了开发人员的效率的.
 3. ...
 
+在我们的实现中，我们做到了将toy Dialect下推到了GPU Dialect，但由于时间有限，所以没有完成从GPU Dialect到LLVM的Pass，所以需要使用mlir-cuda-runner来直接运行GPU Dialect构成的文件。
+
 为了理解我们如何下推到 GPU Dialect, 我们首先有必要了解一下 CUDA 的编程模型, 因为 MLIR 的 GPU Dialect 很大程度上是和 CUDA 模型的概念一致的.
 
 ### CUDA 的编程模型
@@ -181,15 +183,147 @@ int main()
 }
 ```
 
-- [ ] 王总 黄总 TODO
+### 基本框架
+所有下推到GPU Dialect的操作都有大同小异，主要的区别在于对grid和blocks的大小设置，以及在GPU内部所做的操作序列。对于该Dialect的下推操作，我们总结了基本的框架如下:
+```cpp
+struct xxxOpLowering : public ConversionPattern {
+  TransposeOpLowering(MLIRContext *ctx)
+    : ConversionPattern(toy::xxxOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+          ConversionPatternRewriter &rewriter) const final {
+  // 得到语句所在位置
+  auto loc = op->getLoc();
+  // 得到结果的tensorType
+  auto tensorType = (*op->result_type_begin()).cast<TensorType>();
+  
+  // Insert an allocation and deallocation for the result of this operation.
+  auto memRefType = convertTensorToMemRef(tensorType);
+  // 在block的前后插入变量空间的分配和释放操作
+  auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter, op->getParentOfType<ModuleOp>());
+
+  // 根据具体操作的需要，设置grid size和block size
+  auto shape = tensorType.getShape().vec();
+  auto const_1 = rewriter.create<ConstantIndexOp>(loc, 1);
+  auto shapeX = rewriter.create<ConstantIndexOp>(loc, shape[0]);
+  auto shapeY = rewriter.create<ConstantIndexOp>(loc, shape[1]);
+  gpu::KernelDim3 gridSizes = {shapeX, const_1, const_1};
+  gpu::KernelDim3 blockSizes = {shapeY, const_1, const_1};
+
+  // launch GPU
+  auto launchOp = rewriter.create<gpu::LaunchOp>(loc,
+                                              gridSizes.x, gridSizes.y, gridSizes.z,
+                                              blockSizes.x, blockSizes.y, blockSizes.z);
+
+  //设置GPU内部操作的坐标
+  typename toy::xxxOp::Adaptor xxxAdaptor(operands);
+  ValueRange indicesMat({launchOp.getBlockIds().x, launchOp.getThreadIds().x});
+  ValueRange indicesResult({launchOp.getThreadIds().x, launchOp.getBlockIds().x});
+
+  // 插入GPU操作
+  rewriter.setInsertionPointToStart(&launchOp.body().front());
+    /*
+    执行GPU内部的具体操作
+    */
+   // 执行结束操作
+  auto terminator =  rewriter.create<gpu::TerminatorOp>(loc);
+  rewriter.setInsertionPointToEnd(&launchOp.body().front());
+
+  // 替换IR
+  rewriter.replaceOp(op, alloc);
+  return success();
+  }
+};
+```
+
+### 矩阵加法
+矩阵加法较为简单，只需要将两个矩阵对应的[x,y]位置相加即可。
+
+一个简单的toy语言下推到GPU Dialect的示例如下
+```toy
+def main() {
+  var a<2, 3> = [[2, 3, 4], [5, 6, 7]];
+  var b<2, 3> = [1, 2, 3, 4, 5, 6];
+  var c = a + b;
+  print(c);
+}
+```
+```gpu
+module {
+  func @print_memref_f32(memref<*xf32>)
+  func @mcuMemHostRegisterFloat(memref<*xf32>)
+  func @main() {
+    %0 = alloc() : memref<2x3xf32>
+    %1 = memref_cast %0 : memref<2x3xf32> to memref<*xf32>
+    call @mcuMemHostRegisterFloat(%1) : (memref<*xf32>) -> ()
+    %2 = alloc() : memref<2x3xf32>
+    %3 = memref_cast %2 : memref<2x3xf32> to memref<*xf32>
+    call @mcuMemHostRegisterFloat(%3) : (memref<*xf32>) -> ()
+    %4 = alloc() : memref<2x3xf32>
+    %5 = memref_cast %4 : memref<2x3xf32> to memref<*xf32>
+    call @mcuMemHostRegisterFloat(%5) : (memref<*xf32>) -> ()
+    %c0 = constant 0 : index
+    %c1 = constant 1 : index
+    %c2 = constant 2 : index
+    %cst = constant 2.000000e+00 : f32
+    store %cst, %4[%c0, %c0] : memref<2x3xf32>
+    %cst_0 = constant 3.000000e+00 : f32
+    store %cst_0, %4[%c0, %c1] : memref<2x3xf32>
+    %cst_1 = constant 4.000000e+00 : f32
+    store %cst_1, %4[%c0, %c2] : memref<2x3xf32>
+    %cst_2 = constant 5.000000e+00 : f32
+    store %cst_2, %4[%c1, %c0] : memref<2x3xf32>
+    %cst_3 = constant 6.000000e+00 : f32
+    store %cst_3, %4[%c1, %c1] : memref<2x3xf32>
+    %cst_4 = constant 7.000000e+00 : f32
+    store %cst_4, %4[%c1, %c2] : memref<2x3xf32>
+    %c0_5 = constant 0 : index
+    %c1_6 = constant 1 : index
+    %c2_7 = constant 2 : index
+    %cst_8 = constant 1.000000e+00 : f32
+    store %cst_8, %2[%c0_5, %c0_5] : memref<2x3xf32>
+    %cst_9 = constant 2.000000e+00 : f32
+    store %cst_9, %2[%c0_5, %c1_6] : memref<2x3xf32>
+    %cst_10 = constant 3.000000e+00 : f32
+    store %cst_10, %2[%c0_5, %c2_7] : memref<2x3xf32>
+    %cst_11 = constant 4.000000e+00 : f32
+    store %cst_11, %2[%c1_6, %c0_5] : memref<2x3xf32>
+    %cst_12 = constant 5.000000e+00 : f32
+    store %cst_12, %2[%c1_6, %c1_6] : memref<2x3xf32>
+    %cst_13 = constant 6.000000e+00 : f32
+    store %cst_13, %2[%c1_6, %c2_7] : memref<2x3xf32>
+    %c1_14 = constant 1 : index
+    %c2_15 = constant 2 : index
+    %c3 = constant 3 : index
+    gpu.launch blocks(%arg0, %arg1, %arg2) in (%arg6 = %c2_15, %arg7 = %c1_14, %arg8 = %c1_14) threads(%arg3, %arg4, %arg5) in (%arg9 = %c3, %arg10 = %c1_14, %arg11 = %c1_14) {
+      %7 = load %4[%arg0, %arg3] : memref<2x3xf32>
+      %8 = load %2[%arg0, %arg3] : memref<2x3xf32>
+      %9 = addf %7, %8 : f32
+      store %9, %0[%arg0, %arg3] : memref<2x3xf32>
+      gpu.terminator
+    }
+    %6 = memref_cast %0 : memref<2x3xf32> to memref<*xf32>
+    call @print_memref_f32(%6) : (memref<*xf32>) -> ()
+    dealloc %4 : memref<2x3xf32>
+    dealloc %2 : memref<2x3xf32>
+    dealloc %0 : memref<2x3xf32>
+    return
+  }
+}
+```
 ### 矩阵乘法
 矩阵乘法的基本过程分为3步【假设Lhs(m\*n)和Rhs(n\*k)两个矩阵相乘AB】
 1. 对所有$0<=x<=m$,$0<=y<=k$,$0<=r<=n$计算A[x,r]*B[r,y]的乘积(该计算给每个`thread`分配一个两个元素的乘法)
 2. 对所有$0<=x<=m$,$0<=y<=k$,计算$sum_{0<=r<=n}^{Lhs[x,r]*Rhs[r,y]}$(可以使用`GPU dialect`自带的`AllReduce`操作,该操作对一个`block`内的所有元素进行某种二元运算操作,将二元运算操作设置为`add`即可对`block`内元素进行求和)
 3. 将刚才的计算结果存入`Result`数组中对应的Result[x,y]位置即可
+![](./images/matrixmultiply.jpg)
 
 ### 矩阵转置
 矩阵转置的过程相比矩阵乘法更为简单，不需要GPU内部的运算操作，只需要将数据`Load`到GPU中再通过`Store`操作将(x,y)位置的数据相应存到(y,x)处即可。
+![](./images/transpose.png)
+
+
 
 ## 自动微分畅想
 

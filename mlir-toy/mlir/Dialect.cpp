@@ -287,9 +287,6 @@ void SubOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 // SubOp
 
 void CmpOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-// DivOp
-
-void DivOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value lhs, mlir::Value rhs) {
   state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
   state.addOperands({lhs, rhs});
@@ -298,6 +295,15 @@ void DivOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 /// Infer the output shape of the SubOp, this is required by the shape inference
 /// interface.
 void CmpOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
+
+// DivOp
+
+void DivOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value lhs, mlir::Value rhs) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({lhs, rhs});
+}
+
 /// Infer the output shape of the DivOp, this is required by the shape inference
 /// interface.
 void DivOp::inferShapes() { getResult().setType(getOperand(0).getType()); }

@@ -1,0 +1,3 @@
+#!/bin/bash
+
+./bin/toyc $@ -emit=mlir-gpu 2>&1 | mlir-cuda-runner --shared-libs=/optt/llvm-install/lib/libcuda-runtime-wrappers.so,/optt/llvm-install/lib/libmlir_runner_utils.so --entry-point-result=void

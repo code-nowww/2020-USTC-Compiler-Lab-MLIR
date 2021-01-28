@@ -155,8 +155,8 @@ static void printBinaryOp(mlir::OpAsmPrinter &printer, mlir::Operation *op) {
 /// The builder is passed as an argument, so is the state that this method is
 /// expected to fill in order to build the operation.
 void ConstantOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                       double value) {
-  auto dataType = RankedTensorType::get({}, builder.getF64Type());
+                       float value) {
+  auto dataType = RankedTensorType::get({}, builder.getF32Type());
   auto dataAttribute = DenseElementsAttr::get(dataType, value);
   ConstantOp::build(builder, state, dataType, dataAttribute);
 }
@@ -262,7 +262,7 @@ void ConstantOp::inferShapes() { getResult().setType(value().getType()); }
 
 void AddOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value lhs, mlir::Value rhs) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({lhs, rhs});
 }
 
@@ -275,7 +275,7 @@ void AddOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 
 void SubOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value lhs, mlir::Value rhs) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({lhs, rhs});
 }
 
@@ -302,6 +302,15 @@ void DivOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
 /// Infer the output shape of the SubOp, this is required by the shape inference
 /// interface.
 void CmpOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
+
+// DivOp
+
+void DivOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
+                  mlir::Value lhs, mlir::Value rhs) {
+  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addOperands({lhs, rhs});
+}
+
 /// Infer the output shape of the DivOp, this is required by the shape inference
 /// interface.
 void DivOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
@@ -781,7 +790,7 @@ static mlir::LogicalResult verify(ConvSomeOp op) {
 
 void MatrixMulOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                         mlir::Value lhs, mlir::Value rhs) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({lhs, rhs});
 }
 
@@ -915,7 +924,7 @@ void CastOp::inferShapes() { getResult().setType(getOperand().getType()); }
 void GenericCallOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                           StringRef callee, ArrayRef<mlir::Value> arguments) {
   // Generic call always returns an unranked Tensor initially.
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands(arguments);
   state.addAttribute("callee", builder.getSymbolRefAttr(callee));
 }
@@ -935,7 +944,7 @@ Operation::operand_range GenericCallOp::getArgOperands() { return inputs(); }
 
 void MulOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value lhs, mlir::Value rhs) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({lhs, rhs});
 }
 
@@ -1012,7 +1021,7 @@ static mlir::LogicalResult verify(StructAccessOp op) {
 
 void TransposeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                         mlir::Value value) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands(value);
 }
 

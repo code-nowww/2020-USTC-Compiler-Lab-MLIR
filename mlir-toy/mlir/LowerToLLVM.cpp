@@ -96,8 +96,9 @@ public:
     // Generate a call to printf for the current element of the loop.
     auto printOp = cast<toy::PrintOp>(op);
     auto elementLoad = rewriter.create<LoadOp>(loc, printOp.input(), loopIvs);
+    auto elementConv = rewriter.create<FPExtOp>(loc, rewriter.getF64Type(), elementLoad);
     rewriter.create<CallOp>(loc, printfRef, rewriter.getIntegerType(32),
-                            ArrayRef<Value>({formatSpecifierCst, elementLoad}));
+                            ArrayRef<Value>({formatSpecifierCst, elementConv}));
 
     // Notify the rewriter that this operation has been removed.
     rewriter.eraseOp(op);

@@ -479,8 +479,9 @@ private:
   /// Attributes are the way MLIR attaches constant to operations.
   void collectData(ExprAST &expr, std::vector<float> &data) {
     if (auto *lit = dyn_cast<LiteralExprAST>(&expr)) {
-      for (auto &value : lit->getValues())
+      for (auto &value : lit->getValues()) {
         collectData(*value, data);
+      }
       return;
     }
 

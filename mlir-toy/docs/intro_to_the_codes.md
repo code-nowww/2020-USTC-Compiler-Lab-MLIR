@@ -27,6 +27,7 @@ mlir-toy/
 ├── mlir
 │   ├── Dialect.cpp
 │   ├── LowerToAffineLoops.cpp
+│   ├── LowerToGPU.cpp
 │   ├── LowerToLLVM.cpp
 │   ├── MLIRGen.cpp
 │   ├── ShapeInferencePass.cpp
@@ -34,19 +35,23 @@ mlir-toy/
 │   └── ToyCombine.td
 ├── parser
 │   └── AST.cpp
+├── toy-cuda-runner
+├── toy-cuda-runner.cpp
 └── toyc.cpp
 ```
 
 其中, 
-- `Ops.td`: 定义了一些 Operation, 参见[笔记](https://rabbitwhite1.github.io/posts/llvm/2021-1-23-MLIR_ODS.html)
+- `Ops.td`: 定义了一些 Operation, 参见[王章瀚的笔记](https://rabbitwhite1.github.io/posts/llvm/2021-1-23-MLIR_ODS.html)
 - `ShapeInference*` 对应 [Chapter 4: Enabling Generic Transformation with Interfaces](https://mlir.llvm.org/docs/Tutorials/Toy/Ch-4/).
 - `ToyCombine.*` 对应 [Chapter 3: High-level Language-Specific Analysis and Transformation](https://mlir.llvm.org/docs/Tutorials/Toy/Ch-3/)
 - `Dialect.cpp` 定义了 Toy 语言的 dialect 相关信息.
 
 
-## 增加算子的步骤
+## 增加算子
 
-### 基于运算符增加算子
+### 增加算子的步骤
+
+#### 基于运算符增加算子
 
 1. 修改 Lexer.h, Parser.h 和 MLIRGen.cpp 以支持相应的符号(如减号 `-`, 矩阵乘号 `@`)
 2. 修改 Ops.td 增加相应操作, 如 `SubOp`, 此时其实就已经可以生成相应的头文件了.
@@ -74,6 +79,20 @@ mlir-toy/
     ./bin/toyc ../tests/subtract.toy -emit=jit  # 运行程序
     ```
 
-### 基于内置函数增加算子
+#### 基于内置函数增加算子
 
-TODO
+这其实非常类似，唯一的差别就是表达式和函数调用。
+- [ ] 万总 TODO
+
+## 下推到 Affine
+
+- [ ] 高总 TODO
+
+## 下推到 GPU
+
+- [ ] 王总 黄总 TODO
+
+## 自动微分畅想
+
+- [ ] 万总 TODO
+

@@ -101,6 +101,36 @@ MLIR 提供了 GPU 相关的 Dialect, 通过把 toy 语言的 Dialect 下推到�
 
 ### CUDA 的编程模型
 
+CUDA 里面有一个比较重要的概念: `kernel`, kernel 又对应了 GPU 设备上的一个 `grid`, 
+- 每个 grid 有一组 blocks, 用 x, y, z 三个维度区分(图中为了方便只画了 2 个).
+- 每个 block 又有一组 threads, 也是用 xyz 三个维度区分. 
+![](images/gpu_grid_block_thread.png)
+
+用户在写 CUDA 相关代码的时候, 只需要写好函数 (如下示例代码中的 Plus), 然后在函数内引用 `block id` 和 `thread id` 就可以唯一确定一个线程, 这样一来就可以统一安排该线程内部需要做的事情. 
+```c
+__global__ void Plus(float A[], float B[], float C[], int n) {
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    C[i] = A[i] + B[i];
+}
+
+int main()
+{
+    // 一些初始化与分配
+    ...
+    // 把 CPU 内存数据 copy 到 GPU 中
+    ...
+    // 定义kernel执行配置，（1024*1024/512）个block，每个block里面有512个线程
+    dim3 dimBlock(512);
+    dim3 dimGrid(1024 * 1024 / 512);
+    // 执行kernel
+    Plus<<<dimGrid, dimBlock>>>(A, B, C, n);
+    // 把 GPU 内存中计算结果复制回 CPU 内存
+    ...
+    // 释放CPU端、GPU端的内存
+    // free 和 cudaFree
+}
+```
+
 - [ ] 王总 黄总 TODO
 
 ## 自动微分畅想

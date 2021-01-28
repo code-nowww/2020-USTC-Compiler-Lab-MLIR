@@ -36,6 +36,14 @@ static MemRefType convertTensorToMemRef(TensorType type) {
   return MemRefType::get(type.getShape(), type.getElementType());
 }
 
+/// create 3 dimensions for grid or blocks
+static gpu::KernelDim3 createKernelDim3(ConversionPatternRewriter &rewriter, mlir::Location loc, int x, int y, int z){
+  auto shapeX = rewriter.create<ConstantIndexOp>(loc, x);
+  auto shapeY = rewriter.create<ConstantIndexOp>(loc, y);
+  auto shapeZ = rewriter.create<ConstantIndexOp>(loc, z);
+  return {shapeX, shapeY, shapeZ};
+}
+
 /// to use `print_memref_f32`, we need to do registering with `mcuMemHostRegisterFloat`
 static FlatSymbolRefAttr 
 getOrInsertMcuMemHostRegisterFloat(PatternRewriter &rewriter,
@@ -144,12 +152,8 @@ struct BinaryOpLowering : public ConversionPattern {
 
     // get the shape to set gridSize and blockSize
     auto shape = tensorType.getShape().vec();
-    auto const_1 = rewriter.create<ConstantIndexOp>(loc, 1);
-    auto shapeX = rewriter.create<ConstantIndexOp>(loc, shape[0]);
-    auto shapeY = rewriter.create<ConstantIndexOp>(loc, shape[1]);
-
-    gpu::KernelDim3 gridSizes = {shapeX, const_1, const_1};
-    gpu::KernelDim3 blockSizes = {shapeY, const_1, const_1};
+    gpu::KernelDim3 gridSizes = createKernelDim3(rewriter, loc, shape[0], 1, 1);
+    gpu::KernelDim3 blockSizes = createKernelDim3(rewriter, loc, shape[1], 1, 1);
     
     auto launchOp = rewriter.create<gpu::LaunchOp>(loc,
                                                   gridSizes.x, gridSizes.y, gridSizes.z,
@@ -198,11 +202,9 @@ struct MatrixMulOpLowering : public ConversionPattern {
 
   // get the shape to set gridSize and blockSize
   auto shape = tensorType.getShape().vec();
-  auto const_1 = rewriter.create<ConstantIndexOp>(loc, 1);
-  auto shapeX = rewriter.create<ConstantIndexOp>(loc, shape[0]);
-  auto shapeY = rewriter.create<ConstantIndexOp>(loc, shape[1]);
-  gpu::KernelDim3 gridSizes = {shapeX, shapeY, const_1};
-  gpu::KernelDim3 blockSizes = {shapeY, const_1, const_1};
+  auto shapeMid = (operands[0].getType()).cast<MemRefType>().getShape()[1];
+  gpu::KernelDim3 gridSizes = createKernelDim3(rewriter, loc, shape[0], shape[1], 1);
+  gpu::KernelDim3 blockSizes = createKernelDim3(rewriter, loc, shapeMid, 1, 1);
 
   auto launchOp = rewriter.create<gpu::LaunchOp>(loc,
                                                  gridSizes.x, gridSizes.y, gridSizes.z,
@@ -228,7 +230,6 @@ struct MatrixMulOpLowering : public ConversionPattern {
                                                          StringAttr::get("add",rewriter.getContext()));
   auto StoredResult = rewriter.create<mlir::StoreOp>(loc, ReducedResult, alloc, indicesResult);
   auto terminator =  rewriter.create<gpu::TerminatorOp>(loc);
-  rewriter.setInsertionPointToEnd(&launchOp.body().front());
 
   // Replace this operation with the generated alloc.
   rewriter.replaceOp(op, alloc);
@@ -340,20 +341,11 @@ struct TransposeOpLowering : public ConversionPattern {
     auto tensorType = (*op->result_type_begin()).cast<TensorType>();
     auto memRefType = convertTensorToMemRef(tensorType);
     auto shape = memRefType.getShape();
-    auto transShape = shape.vec();
-    for (auto size: llvm::enumerate(shape)) {
-      transShape[shape.size() - 1 - size.index()] = size.value();
-    }
-    auto transMemRefType = MemRefType::get(transShape, memRefType.getElementType());
+    
     auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter, op->getParentOfType<ModuleOp>());
 
-    // get the shape to set gridSize and blockSize
-    auto const_1 = rewriter.create<ConstantIndexOp>(loc, 1);
-    auto shapeX = rewriter.create<ConstantIndexOp>(loc, shape[0]);
-    auto shapeY = rewriter.create<ConstantIndexOp>(loc, shape[1]);
-
-    gpu::KernelDim3 gridSizes = {shapeX, const_1, const_1};
-    gpu::KernelDim3 blockSizes = {shapeY, const_1, const_1};
+    gpu::KernelDim3 gridSizes = createKernelDim3(rewriter, loc, shape[0], 1, 1);
+    gpu::KernelDim3 blockSizes = createKernelDim3(rewriter, loc, shape[1], 1, 1);
     
     auto launchOp = rewriter.create<gpu::LaunchOp>(loc,
                                                   gridSizes.x, gridSizes.y, gridSizes.z,

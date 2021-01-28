@@ -291,13 +291,7 @@ void CmpOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
   state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
   state.addOperands({lhs, rhs});
 }
-// DivOp
 
-void DivOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
-                  mlir::Value lhs, mlir::Value rhs) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
-  state.addOperands({lhs, rhs});
-}
 
 /// Infer the output shape of the SubOp, this is required by the shape inference
 /// interface.
@@ -668,6 +662,22 @@ void ReverseOp::inferShapes() {
   dims.push_back(inputTy.getShape().vec()[1]);
 
   getResult().setType(RankedTensorType::get(dims, inputTy.getElementType()));
+}
+
+static mlir::LogicalResult verify(ReverseOp op) {
+  auto inputType = op.getOperand().getType().dyn_cast<RankedTensorType>();
+  auto resultType = op.getType().dyn_cast<RankedTensorType>();
+  if (!inputType || !resultType)
+    return mlir::success();
+
+  auto inputShape = inputType.getShape().vec();
+  auto resultShape = resultType.getShape().vec();
+  
+  if (inputType.getElementType() != resultType.getElementType()) {
+    return op.emitError()
+           << "error in the LU OP's operands type, should have same type";
+  }
+  return mlir::success();
 }
 
 //===----------------------------------------------------------------------===//

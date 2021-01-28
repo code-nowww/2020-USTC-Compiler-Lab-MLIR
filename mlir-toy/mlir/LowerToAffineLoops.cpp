@@ -1053,6 +1053,77 @@ struct ReverseOpLowering : public ConversionPattern {
   }
 };
 
+struct ReverserOpLowering : public ConversionPattern {
+  ReverserOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::ReverserOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+   
+    auto loc = op->getLoc();
+    auto resultType = (*op->result_type_begin()).cast<TensorType>();
+    auto memRefType = convertTensorToMemRef(resultType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    SmallVector<int64_t, 2> firstlowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 2> steps(2, /*Value=*/1);
+
+    buildAffineLoopNest(
+      rewriter, loc, firstlowerBounds, resultType.getShape(), steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+        toy::ReverserOpAdaptor ReverserAdaptor(operands);
+        Value target = ReverserAdaptor.input();
+        auto Aloaded = nestedBuilder.create<AffineLoadOp>(loc, target, ivs);
+        nestedBuilder.create<AffineStoreOp>(loc, Aloaded, alloc, ivs); 
+      });
+
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
+
+struct ReverseuOpLowering : public ConversionPattern {
+  ReverseuOpLowering(MLIRContext *ctx)
+      : ConversionPattern(toy::ReverseuOp::getOperationName(), 1, ctx) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+   
+    auto loc = op->getLoc();
+    auto resultType = (*op->result_type_begin()).cast<TensorType>();
+    auto looplen = resultType.getShape().vec()[1];
+    auto memRefType = convertTensorToMemRef(resultType);
+    auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+    SmallVector<int64_t, 2> firstlowerBounds(2, /*Value=*/0);
+    SmallVector<int64_t, 2> steps(2, /*Value=*/1);
+
+    buildAffineLoopNest(
+      rewriter, loc, firstlowerBounds, resultType.getShape(), steps,
+      [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+
+        SmallVector<AffineExpr, 2> exprs;
+        toy::ReverseuOpAdaptor ReverseuAdaptor(operands);
+        Value target = ReverseuAdaptor.input();
+
+        exprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()) + 
+                        getAffineConstantExpr(looplen, nestedBuilder.getContext()));
+        exprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
+
+        auto Aloaded = nestedBuilder.create<AffineLoadOp>(loc, target, ivs);
+        nestedBuilder.create<AffineStoreOp>(loc, Aloaded, alloc, ivs); 
+      });
+
+    // Replace this operation with the generated alloc.
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
+
 } // end anonymous namespace.
 
 //===----------------------------------------------------------------------===//

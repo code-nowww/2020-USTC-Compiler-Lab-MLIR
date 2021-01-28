@@ -4,11 +4,11 @@ def main(){
     var g<5,3> = [[1,4,5],[2,5,6],[3,5,6],[7,8,9],[1,1,1]];
     var h<3,3> = [[1,2,3],[5,6,7],[1,1,1]];
     var c = conv_val(a,b);
-    var d = conv_full(a,b);
+    #var d = conv_full(a,b);
     var f = conv_some(g,h);
     print(a);
     print(b);
     print(c);
-    print(d);
+    #print(d);
     print(f);
 }

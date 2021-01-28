@@ -124,8 +124,8 @@ def CmpOp : Toy_Op<"cmp",
     The shapes of the tensor operands are expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$lhs, F32Tensor:$rhs);
+  let results = (outs F32Tensor);
 
   // Specify a parser and printer method.
   let parser = [{ return ::parseBinaryOp(parser, result); }];
@@ -194,8 +194,8 @@ def DivOp : Toy_Op<"div",
     The shapes of the tensor operands are expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$lhs, F64Tensor:$rhs);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$lhs, F32Tensor:$rhs);
+  let results = (outs F32Tensor);
 
   // Specify a parser and printer method.
   let parser = [{ return ::parseBinaryOp(parser, result); }];
@@ -215,8 +215,8 @@ def ConvValidOp : Toy_Op<"conv_val",
     The shapes of the tensor operands are not expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$target, F64Tensor:$kernel);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$target, F32Tensor:$kernel);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $target `:` type($target) `,` $kernel `:` type($kernel) `)` attr-dict `to` type(results)
@@ -242,8 +242,8 @@ def ConvSomeOp : Toy_Op<"conv_some",
     The shapes of the tensor operands are not expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$target, F64Tensor:$kernel);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$target, F32Tensor:$kernel);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $target `:` type($target) `,` $kernel `:` type($kernel) `)` attr-dict `to` type(results)
@@ -269,8 +269,8 @@ def ConvFullOp : Toy_Op<"conv_full",
     The shapes of the tensor operands are not expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$target, F64Tensor:$kernel);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$target, F32Tensor:$kernel);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $target `:` type($target) `,` $kernel `:` type($kernel) `)` attr-dict `to` type(results)
@@ -296,8 +296,8 @@ def FillFullOp : Toy_Op<"fill_full",
     The shapes of the tensor operands are not expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$target, F64Tensor:$kernel);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$target, F32Tensor:$kernel);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $target `:` type($target) `,` $kernel `:` type($kernel) `)` attr-dict `to` type(results)
@@ -323,8 +323,8 @@ def FillSomeOp : Toy_Op<"fill_some",
     The shapes of the tensor operands are not expected to match.
   }];
 
-  let arguments = (ins F64Tensor:$target, F64Tensor:$kernel);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$target, F32Tensor:$kernel);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $target `:` type($target) `,` $kernel `:` type($kernel) `)` attr-dict `to` type(results)
@@ -346,8 +346,8 @@ def LUOp : Toy_Op<"lu",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "LU decomposition";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
@@ -365,8 +365,8 @@ def LUplusOp : Toy_Op<"luplus",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "LU decomposition";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
@@ -384,8 +384,8 @@ def DetOp : Toy_Op<"det",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "LU decomposition";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
@@ -403,8 +403,8 @@ def ReverseOp : Toy_Op<"reverse",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "LU decomposition";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
@@ -422,8 +422,8 @@ def ReverserOp : Toy_Op<"getr",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "LU decomposition";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
@@ -441,8 +441,8 @@ def ReverseuOp : Toy_Op<"getu",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "LU decomposition";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
@@ -686,8 +686,8 @@ def InverseOp : Toy_Op<"inverse",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "inverse operation";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)
@@ -709,8 +709,8 @@ def AdjointOp : Toy_Op<"adjoint",
     [NoSideEffect, DeclareOpInterfaceMethods<ShapeInferenceOpInterface>]> {
   let summary = "adjoint operation";
 
-  let arguments = (ins F64Tensor:$input);
-  let results = (outs F64Tensor);
+  let arguments = (ins F32Tensor:$input);
+  let results = (outs F32Tensor);
 
   let assemblyFormat = [{
     `(` $input `:` type($input) `)` attr-dict `to` type(results)

@@ -71,6 +71,7 @@ public:
         loc, rewriter, "nl", StringRef("\n\0", 2), parentModule, llvmDialect);
 
     // Create a loop for each of the dimensions within the shape.
+    scf::ForOp firstLoop;
     SmallVector<Value, 4> loopIvs;
     for (unsigned i = 0, e = memRefShape.size(); i != e; ++i) {
       auto lowerBound = rewriter.create<ConstantIndexOp>(loc, 0);
@@ -81,7 +82,8 @@ public:
       for (Operation &nested : *loop.getBody())
         rewriter.eraseOp(&nested);
       loopIvs.push_back(loop.getInductionVar());
-
+      // get the first loop
+      if (i == 0) firstLoop = loop;
       // Terminate the loop body.
       rewriter.setInsertionPointToEnd(loop.getBody());
 
@@ -100,6 +102,10 @@ public:
     rewriter.create<CallOp>(loc, printfRef, rewriter.getIntegerType(32),
                             ArrayRef<Value>({formatSpecifierCst, elementConv}));
 
+    // Gernerate a call to print a new line to distinguish tensors.
+    auto newline = rewriter.create<CallOp>(loc, printfRef, rewriter.getIntegerType(32),
+                                           newLineCst);
+    newline.getOperation()->moveBefore(firstLoop);
     // Notify the rewriter that this operation has been removed.
     rewriter.eraseOp(op);
     return success();

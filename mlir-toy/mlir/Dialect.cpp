@@ -288,7 +288,7 @@ void SubOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 
 void CmpOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
             mlir::Value lhs, mlir::Value rhs) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({lhs, rhs});
 }
 
@@ -301,7 +301,7 @@ void CmpOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 
 void DivOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value lhs, mlir::Value rhs) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({lhs, rhs});
 }
 
@@ -314,7 +314,7 @@ void DivOp::inferShapes() { getResult().setType(getOperand(0).getType()); }
 
 void ConvValidOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value target, mlir::Value kernel) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({target, kernel});
 }
 
@@ -373,7 +373,7 @@ static mlir::LogicalResult verify(ConvValidOp op) {
 
 void ConvFullOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value target, mlir::Value kernel) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({target, kernel});
 }
 
@@ -430,7 +430,7 @@ static mlir::LogicalResult verify(ConvFullOp op) {
 
 void FillFullOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value target, mlir::Value kernel) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({target, kernel});
 }
 
@@ -479,7 +479,7 @@ static mlir::LogicalResult verify(FillFullOp op) {
 
 void FillSomeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value target, mlir::Value kernel) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({target, kernel});
 }
 
@@ -535,7 +535,7 @@ static mlir::LogicalResult verify(FillSomeOp op) {
 
 void LUOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value input) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({input});
 }
 
@@ -575,7 +575,7 @@ static mlir::LogicalResult verify(LUOp op) {
 
 void LUplusOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value input) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({input});
 }
 
@@ -612,7 +612,7 @@ static mlir::LogicalResult verify(LUplusOp op) {
 
 void DetOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value input) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({input});
 }
 
@@ -649,7 +649,7 @@ static mlir::LogicalResult verify(DetOp op) {
 
 void ReverseOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value input) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({input});
 }
 
@@ -686,7 +686,7 @@ static mlir::LogicalResult verify(ReverseOp op) {
 
 void ReverserOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value input) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({input});
 }
 
@@ -723,7 +723,7 @@ static mlir::LogicalResult verify(ReverserOp op) {
 
 void ReverseuOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value input) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({input});
 }
 
@@ -759,7 +759,7 @@ static mlir::LogicalResult verify(ReverseuOp op) {
 
 void ConvSomeOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                   mlir::Value target, mlir::Value kernel) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands({target, kernel});
 }
 
@@ -844,7 +844,7 @@ static mlir::LogicalResult verify(MatrixMulOp op) {
 
 void InverseOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                         mlir::Value value) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands(value);
 }
 /// Infer the output shape of the InverseOp, this is required by the shape inference interface.
@@ -884,7 +884,7 @@ static mlir::LogicalResult verify(InverseOp op) {
 
 void AdjointOp::build(mlir::OpBuilder &builder, mlir::OperationState &state,
                         mlir::Value value) {
-  state.addTypes(UnrankedTensorType::get(builder.getF64Type()));
+  state.addTypes(UnrankedTensorType::get(builder.getF32Type()));
   state.addOperands(value);
 }
 

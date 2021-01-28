@@ -480,7 +480,7 @@ struct FillFullOpLowering : public ConversionPattern {
         //toy::ConvValidOpAdaptor ConvValidAdaptor(operands);
         //Value target = ConvValidAdaptor.target();
         const APFloat zero(0.0);
-        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type()),alloc, ivs); 
+        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type()),alloc, ivs); 
       });
 
     SmallVector<int64_t, 2> secondlowerBounds;
@@ -542,8 +542,8 @@ struct FillSomeOpLowering : public ConversionPattern {
 
         //toy::ConvValidOpAdaptor ConvValidAdaptor(operands);
         //Value target = ConvValidAdaptor.target();
-        const APFloat zero(0.0);
-        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type()),alloc, ivs); 
+        const APFloat zero((float)(0.0));
+        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type()),alloc, ivs); 
       });
 
     SmallVector<int64_t, 2> secondlowerBounds;
@@ -602,9 +602,9 @@ struct LUOpLowering : public ConversionPattern {
       rewriter, loc, firstlowerBounds, resultType.getShape(), steps,
       [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
 
-        const APFloat zero(0.0);
-        const APFloat One(1.0);
-        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type()),alloc, ivs); 
+        const APFloat zero((float)(0.0));
+        const APFloat One((float)(1.0));
+        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type()),alloc, ivs); 
       });
 
     SmallVector<int64_t, 2> secondlowerBounds;
@@ -619,12 +619,12 @@ struct LUOpLowering : public ConversionPattern {
       rewriter, loc, secondlowerBounds, secondupperBounds, steps,
       [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
 
-        const APFloat One(1.0);
+        const APFloat One((float)(1.0));
         SmallVector<AffineExpr, 2> exprs;
         exprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
         exprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
 
-        auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF64Type());
+        auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF32Type());
         nestedBuilder.create<AffineStoreOp>(loc, oneexpr, alloc, AffineMap::get(2, 0, exprs, nestedBuilder.getContext()), ivs);
         
       });
@@ -714,8 +714,8 @@ struct LUOpLowering : public ConversionPattern {
             auto temp = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
             auto subed = nestedBuilder.create<SubFOp>(loc, Aloaded, temp);
             nestedBuilder.create<AffineStoreOp>(loc, subed, alloc, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
-            const APFloat zero(0.0);
-            auto Zero = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type());
+            const APFloat zero((float)(0.0));
+            auto Zero = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type());
             nestedBuilder.create<AffineStoreOp>(loc, Zero, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs); 
         });
         
@@ -778,8 +778,8 @@ struct LUOpLowering : public ConversionPattern {
             auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
             auto dived = nestedBuilder.create<DivFOp>(loc, subed, Uloaded);
             nestedBuilder.create<AffineStoreOp>(loc, dived, alloc, AffineMap::get(2, 0, Aexprs, nestedBuilder.getContext()), ivs);
-            const APFloat zero(0.0);
-            auto Zero = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type());
+            const APFloat zero((float)(0.0));
+            auto Zero = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type());
             nestedBuilder.create<AffineStoreOp>(loc, Zero, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs); 
         });
     }//end of for
@@ -847,8 +847,8 @@ struct DetOpLowering : public ConversionPattern {
       rewriter, loc, firstlowerBounds, firstupperBounds, steps,
       [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
         
-        const APFloat onee(1.0);
-        auto One = rewriter.create<ConstantFloatOp>(loc,onee,nestedBuilder.getF64Type());
+        const APFloat onee((float)(1.0));
+        auto One = rewriter.create<ConstantFloatOp>(loc,onee,nestedBuilder.getF32Type());
         nestedBuilder.create<AffineStoreOp>(loc, One, alloc, ivs); 
       });
 
@@ -906,8 +906,8 @@ struct ReverseOpLowering : public ConversionPattern {
       rewriter, loc, firstlowerBounds, resultType.getShape(), steps,
       [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
 
-        const APFloat zero(0.0);
-        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type()),alloc, ivs); 
+        const APFloat zero((float)(0.0));
+        nestedBuilder.create<AffineStoreOp>(loc,rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type()),alloc, ivs); 
       });
 
     SmallVector<int64_t, 2> secondlowerBounds;
@@ -922,7 +922,7 @@ struct ReverseOpLowering : public ConversionPattern {
       rewriter, loc, secondlowerBounds, secondupperBounds, steps,
       [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
 
-        const APFloat One(1.0);
+        const APFloat One((float)(1.0));
         SmallVector<AffineExpr, 2> uexprs, rexprs;
         toy::ReverseOpAdaptor ReverseAdaptor(operands);
         Value target = ReverseAdaptor.input();
@@ -934,7 +934,7 @@ struct ReverseOpLowering : public ConversionPattern {
         uexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
 
         //r[i][i] = 1
-        auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF64Type());
+        auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF32Type());
         nestedBuilder.create<AffineStoreOp>(loc, oneexpr, alloc, AffineMap::get(2, 0, rexprs, nestedBuilder.getContext()), ivs);
         //u[i][i]=1/U[i][i];
         auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, uexprs, nestedBuilder.getContext()), ivs);
@@ -990,8 +990,8 @@ struct ReverseOpLowering : public ConversionPattern {
             SmallVector<AffineExpr, 2> tempexprs, uexprs, Uexprs;
             toy::ReverseOpAdaptor ReverseAdaptor(operands);
             Value target = ReverseAdaptor.input();
-            const APFloat One(1.0);
-            const APFloat zero(0.0);
+            const APFloat One((float)(1.0));
+            const APFloat zero((float)(0.0));
             
             Uexprs.push_back(getAffineConstantExpr(looplen, nestedBuilder.getContext()) +
                              getAffineDimExpr(0, nestedBuilder.getContext()));
@@ -1002,8 +1002,8 @@ struct ReverseOpLowering : public ConversionPattern {
             tempexprs.push_back(getAffineConstantExpr(2*looplen, nestedBuilder.getContext()));
             tempexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
             
-            auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF64Type());
-            auto zeroexpr = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF64Type());
+            auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF32Type());
+            auto zeroexpr = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type());
             auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
             auto temp = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
             auto udiv = nestedBuilder.create<DivFOp>(loc,temp, Uloaded);

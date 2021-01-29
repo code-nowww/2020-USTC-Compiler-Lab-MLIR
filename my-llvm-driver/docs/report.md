@@ -398,3 +398,7 @@ int main()
 - LLVM 已有的 [LoopInfo](https://llvm.org/docs/LoopTerminology.html?highlight=loopinfo#loopinfo)
 - [mermaid 类图画法](https://www.yzer.club/markdown-mermaid-class-diagram/)
 
+## 答辩时的问题回答
+
+- 问: 怎么考虑 goto 的?
+- 答: 我们只在控制流图上进行考虑, 因此不论源程序是 goto 还是 for loop, 抑或是 while loop 都无所谓, 只要在控制流图中存在我们定义的循环结构, 那么我们就判断为循环.

@@ -623,7 +623,7 @@ private:
       auto ru = builder.create<ReverseOp>(location, lu);
       auto r = builder.create<ReverserOp>(location, ru);
       auto u = builder.create<ReverseuOp>(location, ru);
-      return builder.create<MatrixMulOp>(location, r,u);
+      return builder.create<MatrixMulOp>(location, u,r);
     }
 
     if (callee == "det") {

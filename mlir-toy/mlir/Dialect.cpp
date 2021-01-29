@@ -658,7 +658,7 @@ void ReverseOp::inferShapes() {
   auto inputTy = getOperand().getType().cast<RankedTensorType>();
 
   SmallVector<int64_t, 2> dims;
-  dims.push_back(inputTy.getShape().vec()[1] + 1);
+  dims.push_back(inputTy.getShape().vec()[1]*2 + 1);
   dims.push_back(inputTy.getShape().vec()[1]);
 
   getResult().setType(RankedTensorType::get(dims, inputTy.getElementType()));

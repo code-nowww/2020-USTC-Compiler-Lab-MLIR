@@ -943,7 +943,7 @@ struct ReverseOpLowering : public ConversionPattern {
         
       });
 
-    for(int i = 1;i < looplen; i++){
+    for(int i = 0;i < looplen; i++){
 
         for(int k = i-1; k >= 0; k--){
           SmallVector<int64_t, 2> fourthlowerBounds;
@@ -952,7 +952,7 @@ struct ReverseOpLowering : public ConversionPattern {
           fourthlowerBounds.push_back(k);
           fourthlowerBounds.push_back(k+1);
           fourthupperBounds.push_back(k+1);
-          fourthupperBounds.push_back(i);
+          fourthupperBounds.push_back(i+1);
 
           buildAffineLoopNest(
             rewriter, loc, fourthlowerBounds, fourthupperBounds, fourthsteps,
@@ -963,7 +963,7 @@ struct ReverseOpLowering : public ConversionPattern {
               Value target = ReverseAdaptor.input();
 
               tempexprs.push_back(getAffineConstantExpr(2*looplen, nestedBuilder.getContext()));
-              tempexprs.push_back(getAffineDimExpr(k, nestedBuilder.getContext()));
+              tempexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
               Uexprs.push_back(getAffineConstantExpr(looplen + k, nestedBuilder.getContext()));
               Uexprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
               uexprs.push_back(getAffineConstantExpr(looplen, nestedBuilder.getContext()) +
@@ -977,41 +977,43 @@ struct ReverseOpLowering : public ConversionPattern {
               auto tempadded = nestedBuilder.create<AddFOp>(loc, muled, temp);
               nestedBuilder.create<AffineStoreOp>(loc, tempadded, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
           });
-        }
-        //k iter
-        SmallVector<int64_t, 2> fifthlowerBounds(2,0);
-        SmallVector<int64_t, 2> fifthupperBounds;
-        SmallVector<int64_t, 2> fifthsteps(2, 1);
-        fifthupperBounds.push_back(i);
-        fifthupperBounds.push_back(1);
-        buildAffineLoopNest(
-          rewriter, loc, fifthlowerBounds, fifthupperBounds, fifthsteps,
-          [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
-            SmallVector<AffineExpr, 2> tempexprs, uexprs, Uexprs;
-            toy::ReverseOpAdaptor ReverseAdaptor(operands);
-            Value target = ReverseAdaptor.input();
-            const APFloat One((float)(1.0));
-            const APFloat zero((float)(0.0));
-            
-            Uexprs.push_back(getAffineConstantExpr(looplen, nestedBuilder.getContext()) +
-                             getAffineDimExpr(0, nestedBuilder.getContext()));
-            Uexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
-            uexprs.push_back(getAffineConstantExpr(looplen, nestedBuilder.getContext()) +
-                             getAffineDimExpr(0, nestedBuilder.getContext()));
-            uexprs.push_back(getAffineConstantExpr(i, nestedBuilder.getContext()));
-            tempexprs.push_back(getAffineConstantExpr(2*looplen, nestedBuilder.getContext()));
-            tempexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
-            
-            auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF32Type());
-            auto zeroexpr = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type());
-            auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
-            auto temp = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
-            auto udiv = nestedBuilder.create<DivFOp>(loc,temp, Uloaded);
-            auto usub = nestedBuilder.create<SubFOp>(loc,zeroexpr, udiv);
-            nestedBuilder.create<AffineStoreOp>(loc, usub, alloc, AffineMap::get(2, 0, uexprs, nestedBuilder.getContext()), ivs);
-            //reset
-            nestedBuilder.create<AffineStoreOp>(loc, zeroexpr, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs); 
-        });
+
+          //k iter
+          SmallVector<int64_t, 2> fifthlowerBounds;
+          SmallVector<int64_t, 2> fifthupperBounds;
+          fifthlowerBounds.push_back(k);
+          fifthlowerBounds.push_back(0);
+          fifthupperBounds.push_back(k+1);
+          fifthupperBounds.push_back(1);
+          buildAffineLoopNest(
+            rewriter, loc, fifthlowerBounds, fifthupperBounds, fourthsteps,
+            [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+              SmallVector<AffineExpr, 2> tempexprs, uexprs, Uexprs;
+              toy::ReverseOpAdaptor ReverseAdaptor(operands);
+              Value target = ReverseAdaptor.input();
+              //const APFloat One((float)(1.0));
+              const APFloat zero((float)(0.0));
+
+              Uexprs.push_back(getAffineConstantExpr(looplen, nestedBuilder.getContext()) +
+                               getAffineDimExpr(0, nestedBuilder.getContext()));
+              Uexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+              uexprs.push_back(getAffineConstantExpr(looplen, nestedBuilder.getContext()) +
+                               getAffineDimExpr(0, nestedBuilder.getContext()));
+              uexprs.push_back(getAffineConstantExpr(i, nestedBuilder.getContext()));
+              tempexprs.push_back(getAffineConstantExpr(2*looplen, nestedBuilder.getContext()));
+              tempexprs.push_back(getAffineDimExpr(0, nestedBuilder.getContext()));
+
+              //auto oneexpr = rewriter.create<ConstantFloatOp>(loc,One,nestedBuilder.getF32Type());
+              auto zeroexpr = rewriter.create<ConstantFloatOp>(loc,zero,nestedBuilder.getF32Type());
+              auto Uloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, Uexprs, nestedBuilder.getContext()), ivs);
+              auto temp = nestedBuilder.create<AffineLoadOp>(loc, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs);
+              auto udiv = nestedBuilder.create<DivFOp>(loc,temp, Uloaded);
+              auto usub = nestedBuilder.create<SubFOp>(loc,zeroexpr, udiv);
+              nestedBuilder.create<AffineStoreOp>(loc, usub, alloc, AffineMap::get(2, 0, uexprs, nestedBuilder.getContext()), ivs);
+              //reset
+              nestedBuilder.create<AffineStoreOp>(loc, zeroexpr, alloc, AffineMap::get(2, 0, tempexprs, nestedBuilder.getContext()), ivs); 
+          });
+        }//end of k for
 
         for(int k = i+1; k < looplen; k++){
           SmallVector<int64_t, 2> sixthlowerBounds;
@@ -1114,7 +1116,7 @@ struct ReverseuOpLowering : public ConversionPattern {
                         getAffineConstantExpr(looplen, nestedBuilder.getContext()));
         exprs.push_back(getAffineDimExpr(1, nestedBuilder.getContext()));
 
-        auto Aloaded = nestedBuilder.create<AffineLoadOp>(loc, target, ivs);
+        auto Aloaded = nestedBuilder.create<AffineLoadOp>(loc, target, AffineMap::get(2, 0, exprs, nestedBuilder.getContext()), ivs);
         nestedBuilder.create<AffineStoreOp>(loc, Aloaded, alloc, ivs); 
       });
 

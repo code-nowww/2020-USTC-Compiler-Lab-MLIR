@@ -132,22 +132,40 @@ mlir-toy/
 
 ## 下推到 Affine
 
-这里我们添加了一些算子，目前测试无误的有，
-- 基本的二元运算如对应位置的加减乘除等。
-- 矩阵乘法（内积）
-    测试文件位于tests/matrixmul.toy, 通过`Matrixmul(a,b)`进行调用。
+我们希望将Affine Dialect扩展为更好的线性代数库，并进一步支持我们未来可能进行的自动微分的架构，对Affine添加了更多的线性代数操作，目前测试无误的有如下几大类。
 
-- 三种不同模式的卷积
-    我们用图进行说明, 依次为full some和valid
+##### 1. 基本的二元运算如对应位置的加减乘除
+
+##### 2.矩阵乘法（内积）
+
+测试文件位于tests/matrixmul.toy, 通过`Matrixmul(a,b)`进行调用。
+
+##### 3.三种不同模式的卷积
+我们用图进行说明, 依次为full mode,some mode和valid mode
     <center> 
-        <img src="images/full.png" style="zoom: 30%;" /><img    src="images/same.png" style="zoom: 30%;" /><img src="images/   valid.png" style="zoom: 30%;"/>
+        <img src="images/full.png" style="zoom: 30%;" /><img    src="images/same.png" style="zoom: 30%;" /><img src="images/valid.png" style="zoom: 30%;"/>
     </center>
-        通过`conv_full`，`conv_some`，`conv_valid`进行调用，可以在tests里看到测试文件。
+        通过`conv_full`，`conv_some`，`conv_valid`进行调用，可以在tests里看到测试文件。对于input和卷积核均为3*3的卷积操作，我们得到如下的结果。
+    <center> 
+        <img src="images/conv.png" style="zoom: 65%;" />
+    </center> 
+    p.s. 需要说明的是，在拓展为float64位之后，`conv_full`出了一些小问题，暂时还没有解决。 
 
-- 矩阵LU分解与矩阵的行列式
+##### 4.矩阵LU分解与矩阵的行列式
   这部分的测试文件在tests/lu_and_det.toy中进行了测试，分别通过`lu()`和`det()`实现，结果如下。
-    ![](images/lu.png)
-    和python做的结果比较，验证结果是正确的。（本次测试没来得及展示行列式，您可以自己运行tests中的文件进行测试。
+    <center> 
+        <img src="images/lu.png" style="zoom: 65%;" />
+    </center> 
+    和python做的结果比较，验证结果是正确的，您也可以自己运行tests中的文件进行测试。  
+
+##### 5.矩阵求逆
+
+提供了`reverse()`函数求矩阵的逆，这里在tests/reverse.toy中进行了测试，对于输入`var a<3, 3> = [[2, 1, 2], [1, 2, 3],[4, 1, 2]];`，我们得到结果如下所示，在matlab中进行验证，结果无误。
+    <center> 
+        <img src="images/reverse.png" style="zoom: 65%;" />
+    </center> 
+
+
 ## 下推到 GPU
 
 MLIR 提供了 GPU 相关的 Dialect, 通过把 toy 语言的 Dialect 下推到这个 GPU Dialect, 我们可以很方便的调用 CUDA 等 GPU 模型来运行我们的程序. 换句话说, 我们就可以直接让用 toy 语言编写的程序运行在 GPU 上.
